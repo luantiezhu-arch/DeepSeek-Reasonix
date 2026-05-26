@@ -312,10 +312,17 @@ describe("StdinReader — heuristic paste rescue (#522)", () => {
     ]);
   });
 
-  it("leaves typed-then-Enter alone (`abc\\r` is not flagged as paste)", () => {
+  it("flags same-chunk text+Enter as compositionCommit (IME atomic flush)", () => {
+    // No human can type "abc" + Enter inside one stdin chunk (keystrokes
+    // are tens of ms apart, terminals flush each one). A single-chunk
+    // `abc\r` is therefore an IME commit — e.g. WeChat English mode —
+    // and Enter must not trigger submit (issue #1853).
     const { reader, events } = setup();
     reader.feed("abc\r");
-    expect(events).toEqual([{ input: "abc" }, { input: "", return: true }]);
+    expect(events).toEqual([
+      { input: "abc" },
+      { input: "", return: true, compositionCommit: true },
+    ]);
   });
 
   it("leaves Enter-then-typed alone (`\\rabc` is not flagged as paste)", () => {
@@ -347,6 +354,50 @@ describe("StdinReader — heuristic paste rescue (#522)", () => {
     reader.feed("first\r\nsecond\r\nthird");
     // Whole chunk wrapped → paste accumulator delivers normalized logical lines.
     expect(events).toEqual([{ input: "first\nsecond\nthird", paste: true }]);
+  });
+});
+
+describe("StdinReader — compositionCommit (IME atomic flush, issue #1853)", () => {
+  it("bare Enter in its own chunk has no compositionCommit flag", () => {
+    const { reader, events } = setup();
+    reader.feed("\r");
+    expect(events).toEqual([{ input: "", return: true }]);
+  });
+
+  it("Enter in a separate chunk from the typed text is not flagged (real human cadence)", () => {
+    const { reader, events } = setup();
+    reader.feed("abc");
+    reader.feed("\r");
+    expect(events).toEqual([{ input: "abc" }, { input: "", return: true }]);
+  });
+
+  it("Shift+Enter in the same chunk as text stays as a newline insert, not a commit", () => {
+    // Mod+Enter is intentional user action (newline-insert), never IME commit.
+    const { reader, events } = setup();
+    reader.feed("abc\x1b[27;2;13~");
+    expect(events).toEqual([{ input: "abc" }, { input: "", return: true, shift: true }]);
+  });
+
+  it("resets between chunks so a later same-chunk burst still flags", () => {
+    const { reader, events } = setup();
+    reader.feed("abc");
+    reader.feed("\r");
+    reader.feed("de\r");
+    expect(events).toEqual([
+      { input: "abc" },
+      { input: "", return: true },
+      { input: "de" },
+      { input: "", return: true, compositionCommit: true },
+    ]);
+  });
+
+  it("Enter that follows a non-input event (arrow) is not flagged", () => {
+    const { reader, events } = setup();
+    reader.feed("\x1b[A\r");
+    expect(events).toEqual([
+      { input: "", upArrow: true },
+      { input: "", return: true },
+    ]);
   });
 });
 

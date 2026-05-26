@@ -22,9 +22,11 @@ import { FG, SURFACE, TONE } from "./theme/tokens.js";
 /** Pastes shorter than this AND single-line render verbatim; longer ones become a `[paste #N · …]` sentinel chip (#397). */
 export const INLINE_PASTE_THRESHOLD = 200;
 
-// Tight enough that a normal typed Enter (≥80ms after the last keystroke
-// for human cadence) still submits; wide enough that CJK IME commit-then-
-// Enter (terminal flushes both together) falls inside the window.
+// Belt-and-suspenders for IMEs that flush the commit-text and the Enter
+// across two stdin chunks within a few ms — same-chunk IME commits are
+// caught earlier via the stdin reader's `compositionCommit` flag, but
+// some terminal/IME pairs split the flush. Tight enough that normal
+// type-then-Enter (≥80ms human cadence) still submits.
 const IME_GUARD_MS = 50;
 
 function hasNonAscii(s: string): boolean {
@@ -172,6 +174,7 @@ export function PromptInput({
       setCursor(action.cursor);
     }
     if (action.submit) {
+      if (ev.compositionCommit) return;
       if (Date.now() - lastNonAsciiInputAtRef.current < IME_GUARD_MS) {
         lastNonAsciiInputAtRef.current = 0;
         return;

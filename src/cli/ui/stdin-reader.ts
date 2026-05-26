@@ -23,6 +23,8 @@ export interface KeyEvent {
   meta?: boolean;
   /** Bracketed-paste content; consumers MUST NOT re-interpret as keystrokes (e.g. `\n` ≠ submit). */
   paste?: boolean;
+  /** Bare Enter that arrived in the same chunk as preceding text — IME atomic commit (#1853), consumers MUST NOT submit. */
+  compositionCommit?: boolean;
   /** xterm SGR mode 1006 wheel-up. */
   mouseScrollUp?: boolean;
   /** Mouse wheel down — symmetric to `mouseScrollUp`. */
@@ -264,6 +266,8 @@ export class StdinReader {
   // split sequence like `\x1b` + `[A` would dispatch escape+upArrow
   // even though the user only pressed Up.
   private escImmediate: NodeJS.Immediate | null = null;
+  /** Reset per chunk; true when the previous dispatch in this chunk was bare printable input. Drives `compositionCommit` on a same-chunk Enter. */
+  private prevInputInChunk = false;
   private started = false;
   /** The actual `data` listener — kept as a field so `stop()` can detach it. */
   private listener: ((chunk: Buffer | string) => void) | null = null;
@@ -317,7 +321,22 @@ export class StdinReader {
   }
 
   private dispatch(ev: KeyEvent): void {
-    for (const sub of this.subscribers) sub(ev);
+    const isBareEnter =
+      ev.return === true && !ev.shift && !ev.ctrl && !ev.meta && !ev.compositionCommit;
+    const out: KeyEvent =
+      isBareEnter && this.prevInputInChunk ? { ...ev, compositionCommit: true } : ev;
+    const isPrintableInput =
+      ev.input.length > 0 &&
+      !ev.ctrl &&
+      !ev.meta &&
+      !ev.paste &&
+      !ev.return &&
+      !ev.tab &&
+      !ev.escape &&
+      !ev.backspace &&
+      !ev.delete;
+    this.prevInputInChunk = isPrintableInput;
+    for (const sub of this.subscribers) sub(out);
   }
 
   private cancelEscTimer(): void {
@@ -353,6 +372,7 @@ export class StdinReader {
 
   private handleChunk(rawChunk: string): void {
     this.cancelEscTimer();
+    this.prevInputInChunk = false;
     // Paste rescue when DECSET 2004 markers don't arrive (multiplexers
     // strip them, some Windows pipes too) — otherwise each \r in a
     // multi-line paste fires Enter and the loop submits N prompts (#522).

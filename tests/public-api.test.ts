@@ -315,6 +315,8 @@ const PUBLIC_API: readonly string[] = [
   "registerFilesystemTools",
   "registerMemoryTools",
   "registerPlanTool",
+  "registerPowerShellTool",
+  "registerScheduleTool",
   "registerShellTools",
   "registerSubagentTool",
   "registerTodoTool",

@@ -92,34 +92,28 @@ describe("parseCommandChain", () => {
     expect(() => parseCommandChain('git status ; echo "open')).toThrow(/unclosed/);
   });
 
-  it("rejects `cd` in the first chain segment with cwd guidance", () => {
-    expect(() => parseCommandChain('cd nested && node -e "process.cwd()"')).toThrow(
-      /cd in parsed command chains does not change cwd/,
-    );
+  it("parses `cd` in a chain (runtime handles the cwd change)", () => {
+    const c = parseCommandChain('cd nested && node -e "process.cwd()"');
+    expect(c).not.toBeNull();
+    expect(c!.segments.map((s) => s.argv[0])).toEqual(["cd", "node"]);
   });
 
-  it("rejects `cd` anywhere in the chain, not only the first segment", () => {
-    expect(() => parseCommandChain("echo ok && cd nested")).toThrow(
-      /cd in parsed command chains does not change cwd/,
-    );
+  it("parses `cd` in any chain position", () => {
+    const c = parseCommandChain("echo ok && cd nested");
+    expect(c).not.toBeNull();
+    expect(c!.segments.map((s) => s.argv[0])).toEqual(["echo", "cd"]);
   });
 
-  it("rejects `cd` with uppercase CD (case-insensitive)", () => {
-    expect(() => parseCommandChain("CD .. && echo hi")).toThrow(
-      /cd in parsed command chains does not change cwd/,
-    );
+  it("parses `cd` with uppercase CD (case-insensitive)", () => {
+    const c = parseCommandChain("CD .. && echo hi");
+    expect(c).not.toBeNull();
+    expect(c!.segments[0]!.argv).toEqual(["CD", ".."]);
   });
 
-  it("tells Python script tests to run near the script without making workspace-root cwd mandatory", () => {
-    expect(() => parseCommandChain("cd data && python3 parse_fire_protocol.py")).toThrow(
-      /default.*directory where the script was written/i,
-    );
-    expect(() => parseCommandChain("cd data && python3 parse_fire_protocol.py")).toThrow(
-      /do not assume.*input\/data.*cwd/i,
-    );
-    expect(() => parseCommandChain("cd data && python3 parse_fire_protocol.py")).toThrow(
-      /pass input\/data paths as arguments/i,
-    );
+  it("parses `cd` then a script — cd updates cwd at runtime", () => {
+    const c = parseCommandChain("cd data && python3 parse_fire_protocol.py");
+    expect(c).not.toBeNull();
+    expect(c!.segments[0]!.argv[0].toLowerCase()).toBe("cd");
   });
 
   it("still accepts a normal chain without `cd`", () => {

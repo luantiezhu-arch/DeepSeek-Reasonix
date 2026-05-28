@@ -84,7 +84,7 @@ describe("parseCommandChain — redirects", () => {
   });
 
   it("rejects two redirects with no target between them", () => {
-    expect(() => parseCommandChain("cmd > > out")).toThrow(/missing a target/);
+    expect(() => parseCommandChain("cmd > > out")).toThrow(/missing target/);
   });
 
   it("rejects multiple stdout redirects in one segment", () => {
@@ -224,9 +224,7 @@ describe("runChain — redirect execution", () => {
     rmSync(outside, { force: true });
     try {
       const c = parseCommandChain(`node -e "process.stdout.write('blocked')" > "${outside}"`)!;
-      await expect(runChain(c, { cwd: tmp, ...baseOpts })).rejects.toThrow(
-        /outside the workspace sandbox/,
-      );
+      await expect(runChain(c, { cwd: tmp, ...baseOpts })).rejects.toThrow(/escapes sandbox/);
       expect(existsSync(outside)).toBe(false);
     } finally {
       rmSync(outside, { force: true });
@@ -240,9 +238,7 @@ describe("runChain — redirect execution", () => {
       const c = parseCommandChain(
         "node -e \"process.stdout.write('blocked')\" > ../reasonix-redir-outside.txt",
       )!;
-      await expect(runChain(c, { cwd: tmp, ...baseOpts })).rejects.toThrow(
-        /outside the workspace sandbox/,
-      );
+      await expect(runChain(c, { cwd: tmp, ...baseOpts })).rejects.toThrow(/escapes sandbox/);
       expect(existsSync(outside)).toBe(false);
     } finally {
       rmSync(outside, { force: true });

@@ -373,7 +373,7 @@ describe("SkillStore", () => {
     });
   });
 
-  it("loads skills from symlinked directories (#2104)", () => {
+  it.skipIf(process.platform === "win32")("loads skills from symlinked directories (#2104)", () => {
     // Create a real skill directory outside the skills root
     const realDir = mkdtempSync(join(tmpdir(), "reasonix-skills-real-"));
     try {
@@ -398,7 +398,7 @@ describe("SkillStore", () => {
     }
   });
 
-  it("skips broken symlinks gracefully", () => {
+  it.skipIf(process.platform === "win32")("skips broken symlinks gracefully", () => {
     const skillsDir = join(home, ".reasonix", "skills");
     mkdirSync(skillsDir, { recursive: true });
     symlinkSync(join(tmpdir(), `nonexistent-target-${Date.now()}`), join(skillsDir, "broken"));

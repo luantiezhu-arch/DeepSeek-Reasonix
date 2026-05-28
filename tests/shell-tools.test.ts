@@ -500,7 +500,7 @@ describe("runCommand", () => {
       cwd: tmp,
       maxOutputChars: 1000,
     });
-    expect(r.output).toMatch(/\[… truncated \d+ chars …\]$/);
+    expect(r.output).toMatch(/\[—truncated \d+ chars —\]$/);
   });
 
   it("rejects empty commands", async () => {

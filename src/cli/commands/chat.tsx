@@ -25,6 +25,8 @@ import { registerChoiceTool } from "../../tools/choice.js";
 import { registerGitTool } from "../../tools/git.js";
 import { registerImageTool } from "../../tools/image.js";
 import { registerMemoryTools } from "../../tools/memory.js";
+import { registerPowerShellTool } from "../../tools/powershell.js";
+import { registerScheduleTool } from "../../tools/schedule.js";
 import { registerSendMessageTool } from "../../tools/send-message.js";
 import { registerSleepTool } from "../../tools/sleep.js";
 import { registerSysInfoTool } from "../../tools/sysinfo.js";
@@ -349,6 +351,8 @@ export async function chatCommand(opts: ChatOptions): Promise<void> {
     // preferences, doc language, library picks). Independent of plan
     // mode, which chat doesn't have anyway.
     registerChoiceTool(tools);
+    registerPowerShellTool(tools);
+    registerScheduleTool(tools);
   }
 
   // resolveSession handles --new (timestamped name, old session preserved)

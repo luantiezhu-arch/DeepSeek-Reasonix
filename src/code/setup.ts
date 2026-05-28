@@ -23,7 +23,9 @@ import { registerJavaSourceTool } from "../tools/java-source.js";
 import { JobRegistry } from "../tools/jobs.js";
 import { registerMemoryTools } from "../tools/memory.js";
 import { registerPlanTool } from "../tools/plan.js";
+import { registerPowerShellTool } from "../tools/powershell.js";
 import { registerScaffoldTools } from "../tools/scaffold.js";
+import { registerScheduleTool } from "../tools/schedule.js";
 import { registerSendMessageTool } from "../tools/send-message.js";
 import { registerShellTools } from "../tools/shell.js";
 import { type SkillInstalledHook, registerSkillTools } from "../tools/skills.js";
@@ -104,6 +106,8 @@ export async function buildCodeToolset(opts: CodeToolsetOpts): Promise<CodeTools
   registerSendMessageTool(tools);
   registerSysInfoTool(tools);
   registerWatchTool(tools);
+  registerPowerShellTool(tools);
+  registerScheduleTool(tools);
   registerGitTool(tools);
   registerScaffoldTools(tools, { projectRoot: opts.rootDir });
   if (searchEnabled()) {

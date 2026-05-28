@@ -22,6 +22,7 @@ import {
 import { QQChannel } from "../../qq/channel.js";
 import { ToolRegistry } from "../../tools.js";
 import { registerChoiceTool } from "../../tools/choice.js";
+import { registerGitTool } from "../../tools/git.js";
 import { registerMemoryTools } from "../../tools/memory.js";
 import { registerSendMessageTool } from "../../tools/send-message.js";
 import { registerSysInfoTool } from "../../tools/sysinfo.js";
@@ -328,6 +329,7 @@ export async function chatCommand(opts: ChatOptions): Promise<void> {
   registerSendMessageTool(tools!);
   registerSysInfoTool(tools!);
   registerWatchTool(tools!);
+  registerGitTool(tools!);
 
   // Memory tools — available in every session, not just code mode.
   // Chat-mode callers get global scope only; project scope requires

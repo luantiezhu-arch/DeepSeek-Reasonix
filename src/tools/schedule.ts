@@ -1,4 +1,7 @@
-/** schedule — persistent scheduled tasks (cron-style). Tasks are stored in ~/.reasonix/scheduled_tasks.json */
+/** schedule — persistent scheduled tasks (cron-style) with optional background scheduler.
+ *  Tasks are stored in ~/.reasonix/scheduled_tasks.json. Start the background loop via
+ *  `schedule start` — it polls every 15s and fires due tasks via send_message.
+ */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -25,12 +28,10 @@ function matchCron(expr: string, date: Date): boolean {
 
 function matchField(pattern: string, val: number): boolean {
   if (pattern === "*") return true;
-  // Handle "*/N" step
   if (pattern.startsWith("*/")) {
     const step = Number.parseInt(pattern.slice(2), 10);
     return step > 0 && val % step === 0;
   }
-  // Handle "N-M" range
   if (pattern.includes("-")) {
     const [a, b] = pattern.split("-").map(Number);
     return val >= (a ?? 0) && val <= (b ?? 59);
@@ -44,7 +45,7 @@ interface ScheduledTask {
   id: number;
   cron: string;
   prompt: string;
-  lastMatch: string | null; // ISO date of last cron match (updated on check)
+  lastMatch: string | null; // ISO date of last cron match (updated on check / background fire)
   createdAt: string;
 }
 
@@ -75,20 +76,71 @@ function cronToHuman(expr: string): string {
   return parts.map((p, i) => (p === "*" ? `每${labels[i]}` : `${p}${labels[i]}`)).join(" ");
 }
 
+/* ------------------------------------------------------------------ */
+/*  Background scheduler loop                                         */
+/* ------------------------------------------------------------------ */
+
+let _schedulerTimer: ReturnType<typeof setInterval> | null = null;
+/** Track the last minute each task was fired in, so we don't re-fire within the same minute. */
+const _lastFiredMinute = new Map<number, number>();
+let _registry: ToolRegistry | null = null;
+
+const SCHEDULER_INTERVAL_MS = 15_000; // check every 15 seconds
+
+function schedulerTick(): void {
+  const store = load();
+  if (store.tasks.length === 0) return;
+  const now = new Date();
+  const minuteKey =
+    now.getFullYear() * 1000000 +
+    now.getMonth() * 10000 +
+    now.getDate() * 100 +
+    now.getHours() * 60 +
+    now.getMinutes();
+
+  for (const task of store.tasks) {
+    if (!matchCron(task.cron, now)) continue;
+    const last = _lastFiredMinute.get(task.id);
+    if (last === minuteKey) continue; // already fired this minute
+
+    // Mark fired
+    _lastFiredMinute.set(task.id, minuteKey);
+    task.lastMatch = now.toISOString();
+
+    // Fire notification via send_message if registry is available
+    if (_registry?.has("send_message")) {
+      const msg = `⏰ 定时任务 #${task.id} 触发\n  cron: ${task.cron} (${cronToHuman(task.cron)})\n  任务: ${task.prompt}`;
+      _registry
+        .dispatch("send_message", JSON.stringify({ message: msg, level: "info" }))
+        .catch(() => {});
+    }
+  }
+  save(store);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Tool registration                                                 */
+/* ------------------------------------------------------------------ */
+
 export function registerScheduleTool(registry: ToolRegistry): ToolRegistry {
+  _registry = registry;
+
   registry.register({
     name: "schedule",
     description:
-      "定时任务管理。支持创建 cron 任务、列出任务、删除任务、检查到期任务。\n" +
+      "定时任务管理。支持创建 cron 任务、列出任务、删除任务、检查到期任务、启动/停止后台调度器。\n" +
       "cron 格式: 5 字段 (分 时 日 月 周)，如 '*/5 * * * *' = 每5分钟, '30 14 * * *' = 每天14:30\n" +
-      "check 仅检查不自动执行，需要 LLM 主动调用后根据返回结果执行对应任务。任务持久化到 ~/.reasonix/scheduled_tasks.json，跨会话保存。",
+      "start — 启动后台调度器（每15秒自动检查到期任务并推送通知）\n" +
+      "stop — 停止后台调度器\n" +
+      "任务持久化到 ~/.reasonix/scheduled_tasks.json，跨会话保存。后台调度器仅在当前会话运行。",
     parameters: {
       type: "object",
       properties: {
         command: {
           type: "string",
-          enum: ["create", "list", "delete", "check"],
-          description: "create=创建任务, list=列出任务, delete=删除任务, check=检查到期任务",
+          enum: ["create", "list", "delete", "check", "start", "stop", "status"],
+          description:
+            "create=创建, list=列出, delete=删除, check=检查到期, start=启动调度器, stop=停止调度器, status=调度器状态",
         },
         cron: { type: "string", description: "cron 表达式（5字段）。仅 create 需要。" },
         prompt: { type: "string", description: "到期执行的任务提示。仅 create 需要。" },
@@ -110,7 +162,6 @@ export function registerScheduleTool(registry: ToolRegistry): ToolRegistry {
           if (parts.length !== 5)
             throw new Error("schedule: cron 格式错误，需要 5 字段 (分 时 日 月 周)");
 
-          // Validate each field is a recognizable cron sub-expression
           for (const part of parts) {
             if (
               part === "*" ||
@@ -149,6 +200,7 @@ export function registerScheduleTool(registry: ToolRegistry): ToolRegistry {
           const idx = store.tasks.findIndex((t) => t.id === Number.parseInt(args.id!));
           if (idx < 0) throw new Error(`schedule: 找不到任务 #${args.id}`);
           store.tasks.splice(idx, 1);
+          _lastFiredMinute.delete(Number.parseInt(args.id!));
           save(store);
           return `✅ 已删除任务 #${args.id}`;
         }
@@ -156,10 +208,32 @@ export function registerScheduleTool(registry: ToolRegistry): ToolRegistry {
         case "check": {
           const now = new Date();
           const due = store.tasks.filter((t) => matchCron(t.cron, now));
-          // Update lastMatch for matched tasks
           for (const t of due) t.lastMatch = now.toISOString();
           if (due.length === 0) return "当前没有到期需要执行的任务。";
           return `到期任务 (${due.length} 个):\n${due.map((t) => `  #${t.id} ${t.cron} → ${t.prompt}`).join("\n")}`;
+        }
+
+        case "start": {
+          if (_schedulerTimer) return "⚠️ 后台调度器已在运行。";
+          _schedulerTimer = setInterval(schedulerTick, SCHEDULER_INTERVAL_MS);
+          _schedulerTimer.unref(); // don't keep process alive for scheduler
+          return "✅ 后台调度器已启动（每15秒检查一次到期任务，通过 send_message 推送通知）。";
+        }
+
+        case "stop": {
+          if (!_schedulerTimer) return "⚠️ 后台调度器未运行。";
+          clearInterval(_schedulerTimer);
+          _schedulerTimer = null;
+          _lastFiredMinute.clear();
+          return "✅ 后台调度器已停止。";
+        }
+
+        case "status": {
+          const running = _schedulerTimer !== null;
+          const taskCount = store.tasks.length;
+          const due =
+            taskCount > 0 ? store.tasks.filter((t) => matchCron(t.cron, new Date())).length : 0;
+          return `当前到期任务: ${due}\n任务总数: ${taskCount}\n后台调度器: ${running ? "🟢 运行中" : "⚪ 已停止"}`;
         }
 
         default:

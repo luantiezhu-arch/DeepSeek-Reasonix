@@ -1283,6 +1283,8 @@ export function registerWebTools(registry: ToolRegistry, opts: WebToolsOptions =
       }
       // If custom method/body/headers specified, use direct fetch
       if (args.method && args.method !== "GET") {
+        // SSRF protection — same DNS + internal IP check as plain GET path
+        const parsedUrl = await assertPublicHttpUrl(args.url);
         const fetchOpts: RequestInit & { headers?: Record<string, string> } = {
           method: args.method,
         };
@@ -1294,11 +1296,26 @@ export function registerWebTools(registry: ToolRegistry, opts: WebToolsOptions =
             throw new Error("web_fetch: headers 必须是有效的 JSON 对象字符串");
           }
         }
-        const resp = await fetch(args.url, { ...fetchOpts, signal: ctx?.signal });
+        // Auto-add Content-Type for JSON when user didn't set it
+        if (
+          args.body &&
+          (!fetchOpts.headers ||
+            !Object.keys(fetchOpts.headers).some((k) => k.toLowerCase() === "content-type"))
+        ) {
+          const trimmed = args.body.trim();
+          const looksLikeJson =
+            (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+            (trimmed.startsWith("[") && trimmed.endsWith("]"));
+          if (looksLikeJson) {
+            if (!fetchOpts.headers) (fetchOpts as Record<string, unknown>).headers = {};
+            (fetchOpts.headers as Record<string, string>)["Content-Type"] = "application/json";
+          }
+        }
+        const resp = await fetch(parsedUrl, { ...fetchOpts, signal: ctx?.signal });
         const text = await resp.text();
         const max = 32000;
         return text.length > max
-          ? `${text.slice(0, max)}\n\n[—truncated ${text.length - max} chars —]`
+          ? `${text.slice(0, max)}\n\n[… truncated ${text.length - max} chars …]`
           : text;
       }
       if (loadWebSearchEngine(opts.configPath) === "ollama") {

@@ -27,33 +27,45 @@ export function registerWatchTool(registry: ToolRegistry): ToolRegistry {
       },
       required: ["path"],
     },
-    fn: async (args: { path: string; timeout?: number; pattern?: string }) => {
+    fn: async (args: { path: string; timeout?: number; pattern?: string }, ctx) => {
       const watchPath = resolve(args.path);
       const timeoutMs = Math.min(300_000, Math.max(5_000, (args.timeout ?? 60) * 1000));
       const pattern = args.pattern ? args.pattern.toLowerCase() : null;
 
       return new Promise<string>((resolvePromise, reject) => {
         let aborted = false;
-        const timer = setTimeout(() => {
+        const cleanup = () => {
           aborted = true;
           watcher.close();
+        };
+
+        const timer = setTimeout(() => {
+          cleanup();
           resolvePromise(`[watch] 已监听 ${args.path} ${args.timeout ?? 60} 秒，未检测到变化。`);
         }, timeoutMs);
+
+        // Respect abort signal (Esc during watch)
+        const onAbort = () => {
+          clearTimeout(timer);
+          cleanup();
+          resolvePromise("[watch] 监听已取消。");
+        };
+        ctx?.signal?.addEventListener("abort", onAbort, { once: true });
 
         const watcher = watch(watchPath, { recursive: true }, (eventType, filename) => {
           if (aborted) return;
           if (pattern && filename && !filename.toLowerCase().includes(pattern)) return;
           clearTimeout(timer);
+          ctx?.signal?.removeEventListener("abort", onAbort);
           watcher.close();
           resolvePromise(`[watch] 检测到变化: ${eventType} — ${filename ?? watchPath}`);
         });
 
         watcher.on("error", (err) => {
           clearTimeout(timer);
+          ctx?.signal?.removeEventListener("abort", onAbort);
           reject(new Error(`[watch] 监听失败: ${err.message}`));
         });
-
-        // Also resolve on abort signal
       });
     },
   });

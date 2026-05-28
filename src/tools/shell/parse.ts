@@ -316,6 +316,9 @@ export function isAllowed(
   }
   if (argv.length === 0) return false;
 
+  // `cd` is handled by runChain (updates cwd without spawning), always safe
+  if (argv[0]!.toLowerCase() === "cd") return true;
+
   const allowlist = [...BUILTIN_ALLOWLIST, ...extra];
   for (const prefix of allowlist) {
     const prefixTokens = prefix.split(" ");

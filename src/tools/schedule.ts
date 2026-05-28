@@ -109,6 +109,20 @@ export function registerScheduleTool(registry: ToolRegistry): ToolRegistry {
           const parts = args.cron.trim().split(/\s+/);
           if (parts.length !== 5)
             throw new Error("schedule: cron 格式错误，需要 5 字段 (分 时 日 月 周)");
+
+          // Validate each field is a recognizable cron sub-expression
+          for (const part of parts) {
+            if (
+              part === "*" ||
+              /^\*\/\d+$/.test(part) ||
+              /^\d+-\d+$/.test(part) ||
+              /^\d+$/.test(part)
+            ) {
+              continue;
+            }
+            throw new Error(`schedule: cron 字段 "${part}" 格式无效`);
+          }
+
           const now = new Date();
           const task: ScheduledTask = {
             id: store.nextId++,

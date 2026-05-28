@@ -1,10 +1,8 @@
 /** powershell — execute PowerShell commands natively on Windows with proper encoding. */
 
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { spawn } from "node:child_process";
 import type { ToolRegistry } from "../tools.js";
-
-const execAsync = promisify(execFile);
+import { smartDecodeOutput } from "./shell/exec.js";
 
 export function registerPowerShellTool(registry: ToolRegistry): ToolRegistry {
   registry.register({
@@ -33,11 +31,11 @@ export function registerPowerShellTool(registry: ToolRegistry): ToolRegistry {
 
       const timeoutMs = Math.min(120_000, Math.max(5_000, (args.timeout ?? 30) * 1000));
       const ps = process.env.PROCESSOR_ARCHITECTURE?.toLowerCase().includes("arm")
-        ? "powershell.exe"
+        ? "pwsh.exe"
         : "powershell.exe";
 
-      try {
-        const { stdout, stderr } = await execAsync(
+      return new Promise<string>((resolve, reject) => {
+        const child = spawn(
           ps,
           [
             "-NoProfile",
@@ -46,19 +44,38 @@ export function registerPowerShellTool(registry: ToolRegistry): ToolRegistry {
             `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; ${args.command}`,
           ],
           {
-            timeout: timeoutMs,
-            maxBuffer: 2 * 1024 * 1024,
+            windowsHide: true,
             env: { ...process.env, PYTHONIOENCODING: "utf-8" },
           },
         );
 
-        const output = [stdout, stderr].filter(Boolean).join("\n").trim();
-        return output || "(命令执行完毕，无输出)";
-      } catch (err: unknown) {
-        const e = err as Error & { stdout?: string; stderr?: string };
-        const msg = e.stdout || e.stderr || e.message || String(err);
-        throw new Error(`powershell: ${msg}`);
-      }
+        const chunks: Buffer[] = [];
+        const errChunks: Buffer[] = [];
+        child.stdout?.on("data", (chunk: Buffer) => chunks.push(chunk));
+        child.stderr?.on("data", (chunk: Buffer) => errChunks.push(chunk));
+
+        const timer = setTimeout(() => {
+          child.kill();
+          reject(new Error("powershell: 命令执行超时"));
+        }, timeoutMs);
+
+        child.on("close", (code) => {
+          clearTimeout(timer);
+          const output = smartDecodeOutput(Buffer.concat(chunks));
+          const errOutput = smartDecodeOutput(Buffer.concat(errChunks));
+          const combined = [output, errOutput].filter(Boolean).join("\n").trim();
+          if (code !== 0 && !combined) {
+            reject(new Error(`powershell: 命令以退出码 ${code} 结束`));
+            return;
+          }
+          resolve(combined || "(命令执行完毕，无输出)");
+        });
+
+        child.on("error", (err) => {
+          clearTimeout(timer);
+          reject(new Error(`powershell: ${err.message}`));
+        });
+      });
     },
   });
   return registry;

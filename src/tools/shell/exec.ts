@@ -57,6 +57,9 @@ export async function runCommand(
     shell: false,
     windowsHide: true,
     detached: process.platform !== "win32",
+    // PYTHONIOENCODING + PYTHONUTF8 force Python children to emit UTF-8
+    // on stdout. Without this, CJK Windows defaults to GBK and
+    // print("…") raises UnicodeEncodeError on non-GBK chars.
     env: { ...normalizedEnv, PYTHONIOENCODING: "utf-8", PYTHONUTF8: "1" },
   };
 
@@ -78,9 +81,14 @@ export async function runCommand(
       reject(err);
       return;
     }
+    // Collect raw Buffer chunks rather than decoding incrementally —
+    // a multi-byte sequence can land split across chunks, and a naïve
+    // chunk.toString() corrupts it before the second half arrives.
+    // Decode once at close time via smartDecodeOutput which handles
+    // GBK fallback on Windows. 2× byte cap avoids OOM on chatty output.
     const chunks: Buffer[] = [];
     let totalBytes = 0;
-    const byteCap = maxChars * 2 * 4;
+    const byteCap = maxChars * 2 * 4; // worst-case 4 bytes/char
     let timedOut = false;
     let aborted = false;
     const killChildTree = () => killProcessTree(child);

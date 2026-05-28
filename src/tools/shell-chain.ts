@@ -166,6 +166,7 @@ function parseSegment(segStr: string): ChainSegment {
   return { argv, redirects };
 }
 
+/** stdin (`<`) ≤1, stdout (`>`/`>>`/`&>`) ≤1, stderr (`2>`/`2>>`/`&>`/`2>&1`) ≤1; reject conflicts. */
 function validateRedirectFds(redirects: readonly Redirect[]): void {
   let stdin = 0;
   let stdout = 0;
@@ -226,9 +227,11 @@ export interface ChainResult {
 
 interface ChainGroup {
   segments: ChainSegment[];
+  /** Op connecting the PREVIOUS group to THIS one (`||`, `&&`, `;`); null on the first group. */
   opBefore: Exclude<ChainOp, "|"> | null;
 }
 
+/** Pipe groups are runs of segments joined by `|`; sequential ops (`||`, `&&`, `;`) split them. */
 function groupChain(chain: CommandChain): ChainGroup[] {
   const groups: ChainGroup[] = [{ segments: [chain.segments[0]!], opBefore: null }];
   for (let i = 0; i < chain.ops.length; i++) {

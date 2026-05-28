@@ -7,6 +7,11 @@ import { detectShellOperator, prepareSpawn, tokenizeCommand } from "./shell.js";
 /** Kills the whole tree — `child.kill` only hits the direct child, leaving npm-spawned dev servers orphaned. */
 function killProcessTree(pid: number, signal: "SIGTERM" | "SIGKILL"): void {
   if (process.platform === "win32") {
+    // taskkill: /T = tree, /F = force (TerminateProcess, no cleanup).
+    // Graceful path still uses /F on Windows because there's no signal
+    // in the POSIX sense — the closest equivalent is Ctrl+Break, which
+    // is unreliable from another console. /F with /T is what most
+    // process managers ship on Windows.
     const args = ["/pid", String(pid), "/T"];
     if (signal === "SIGKILL") args.push("/F");
     try {
@@ -18,6 +23,8 @@ function killProcessTree(pid: number, signal: "SIGTERM" | "SIGKILL"): void {
     } catch {}
     return;
   }
+  // POSIX: negative pid signals the whole process group. Requires the
+  // spawn to have been detached (which `start()` does below).
   try {
     process.kill(-pid, signal);
     return;
@@ -27,9 +34,12 @@ function killProcessTree(pid: number, signal: "SIGTERM" | "SIGKILL"): void {
   } catch {}
 }
 
-const DEFAULT_OUTPUT_CAP_BYTES = 64 * 1024;
+/** Per-job output ring. Capped so a chatty dev server doesn't OOM. */
+const DEFAULT_OUTPUT_CAP_BYTES = 64 * 1024; // 64 KB
 
+/** First match cuts startup wait short; conservative patterns — a false negative costs a real stall. */
 const READY_SIGNALS: ReadonlyArray<RegExp> = [
+  // HTTP server banners
   /\blistening on\b/i,
   /\blocal:\s+https?:\/\//i,
   /\bhttps?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0)(?::\d+)?\b/i,
@@ -42,18 +52,26 @@ const READY_SIGNALS: ReadonlyArray<RegExp> = [
 ];
 
 export interface JobStartOptions {
+  /** Absolute path to cwd for the spawned child. */
   cwd: string;
+  /** Capped at 30; ready-signal match short-circuits. Default 3. */
   waitSec?: number;
+  /** Signal plumbed through from the calling tool's AbortSignal. */
   signal?: AbortSignal;
+  /** Total per-job output buffer cap (bytes). Default 64 KB. */
   maxBufferBytes?: number;
 }
 
 export interface JobStartResult {
   jobId: number;
   pid: number | null;
+  /** True iff the child was still running at the point we returned. */
   stillRunning: boolean;
+  /** True iff a READY_SIGNALS pattern matched during the wait window. */
   readyMatched: boolean;
+  /** Preview of combined stdout+stderr accumulated during the wait. */
   preview: string;
+  /** If the child exited during the wait, its exit code; else null. */
   exitCode: number | null;
 }
 
@@ -72,8 +90,10 @@ export interface JobRecord {
 export class JobRegistry {
   private readonly jobs = new Map<number, InternalJob>();
   private nextId = 1;
+  /** Max completed jobs to retain for list_jobs / job_output lookups. */
   private static readonly MAX_COMPLETED_JOBS = 20;
 
+  /** Resolves on (a) ready signal, (b) early exit, or (c) waitSec deadline — child keeps running regardless. */
   async start(command: string, opts: JobStartOptions): Promise<JobStartResult> {
     const trimmed = command.trim();
     if (!trimmed) throw new Error("run_background: empty command");
@@ -104,6 +124,8 @@ export class JobRegistry {
     try {
       child = spawn(bin, args, spawnOpts);
     } catch (err) {
+      // Can't even spawn — record a dead job so the model sees the
+      // failure in list_jobs, and return a synthetic result.
       const id = this.nextId++;
       const job: InternalJob = {
         id,
@@ -161,6 +183,8 @@ export class JobRegistry {
     this.jobs.set(id, job);
 
     let readyMatched = false;
+    // Sliding window for cross-chunk ready-signal matching. Test only the
+    // last 1KB — matching against the full buffer would be O(N²) per chunk.
     let recentForReady = "";
     const READY_WINDOW = 1024;
     const onData = (chunk: Buffer | string) => {
@@ -197,6 +221,10 @@ export class JobRegistry {
       job.signalReady();
       job.signalClosed();
     });
+    // `exit` fires when the process is dead; `close` waits for stdio drain too.
+    // On Windows + Node ≥ 24, drained stdio can lag 5–10s behind taskkill /T /F,
+    // so we settle `running`/`closedPromise` on the earlier event. `close` is
+    // still wired for the no-exit fallback (spawn error before any process exists).
     const settleClosed = (code: number | null) => {
       if (!job.running && job.exitCode !== null) return;
       job.running = false;
@@ -212,6 +240,7 @@ export class JobRegistry {
     if (opts.signal?.aborted) onAbort();
     else opts.signal?.addEventListener("abort", onAbort, { once: true });
 
+    // Race: (a) ready signal, (b) child exit, (c) wait deadline.
     let timer: ReturnType<typeof setTimeout> | null = null;
     await Promise.race([
       readyPromise,
@@ -293,16 +322,22 @@ export class JobRegistry {
     };
   }
 
+  /** SIGTERM, wait graceMs, then SIGKILL. Idempotent on already-exited jobs. */
   async stop(id: number, opts: { graceMs?: number } = {}): Promise<JobRecord | null> {
     const job = this.jobs.get(id);
     if (!job) return null;
     if (!job.running || !job.child) return snapshot(job);
     const graceMs = Math.max(0, opts.graceMs ?? 2000);
+    // Tree kill — reaches grandchildren (vite, esbuild, etc.) instead
+    // of just the npm/cmd.exe wrapper that our direct child represents.
     if (job.pid !== null) killProcessTree(job.pid, "SIGTERM");
     else
       try {
         job.child.kill("SIGTERM");
       } catch {}
+    // closedPromise (not readyPromise) — readyPromise can have fired at
+    // startup on a ready-signal regex match, which would short-circuit
+    // this race even though the process is still alive.
     await Promise.race([job.closedPromise, new Promise<void>((res) => setTimeout(res, graceMs))]);
     if (job.running) {
       if (job.pid !== null) killProcessTree(job.pid, "SIGKILL");
@@ -310,7 +345,11 @@ export class JobRegistry {
         try {
           job.child.kill("SIGKILL");
         } catch {}
+      // Wait for the actual close handler — a fixed timer can return
+      // before Node's `close` event fires under load.
       await Promise.race([job.closedPromise, new Promise<void>((res) => setTimeout(res, 5000))]);
+      // On Windows + Node ≥ 24, `close` sometimes never fires after taskkill /T /F.
+      // Settle the record so callers don't see ghost-running.
       if (job.running) {
         job.running = false;
         job.signalClosed();
@@ -324,6 +363,9 @@ export class JobRegistry {
   }
 
   async shutdown(deadlineMs = 5000): Promise<void> {
+    // Grace window: give well-behaved apps time to clean up, capped at
+    // half the deadline so we always leave room for a SIGKILL pass +
+    // reap confirmation.
     const start = Date.now();
     const runningJobs = [...this.jobs.values()].filter((j) => j.running && j.child);
     if (runningJobs.length === 0) return;
@@ -346,8 +388,12 @@ export class JobRegistry {
           job.child?.kill("SIGKILL");
         } catch {}
     }
+    // Wait for close events post-SIGKILL. taskkill /T on Windows is
+    // async — without this wait, shutdown() can return while
+    // grandchildren are still mid-teardown.
     const remaining = Math.max(800, deadlineMs - elapsed());
     await Promise.race([allClose, new Promise<void>((res) => setTimeout(res, remaining))]);
+    // Same Node ≥ 24 Windows fallback: settle if `close` never arrives.
     for (const job of runningJobs) {
       if (job.running) {
         job.running = false;
@@ -356,12 +402,14 @@ export class JobRegistry {
     }
   }
 
+  /** Count of still-running jobs — drives the TUI status-bar indicator. */
   runningCount(): number {
     let n = 0;
     for (const job of this.jobs.values()) if (job.running) n++;
     return n;
   }
 
+  /** Evict oldest completed jobs when the map exceeds MAX_COMPLETED_JOBS. */
   private maybeCleanup(): void {
     const completed: Array<{ id: number; startedAt: number }> = [];
     for (const [id, job] of this.jobs) {
@@ -377,16 +425,22 @@ export class JobRegistry {
 }
 
 interface InternalJob extends JobRecord {
+  /** Underlying Node child process. Null only on spawn failure. */
   child: ChildProcess | null;
+  /** Resolved when ready-signal fires OR the child exits. */
   readyPromise: Promise<void>;
+  /** Fires readyPromise — called by ready-signal OR close/error handlers. */
   signalReady: () => void;
+  /** Resolves only on close/error — never on ready-signal. Used by stop() to wait for actual exit. */
   closedPromise: Promise<void>;
   signalClosed: () => void;
+  /** One-shot waiters for "some new output arrived". Cleared after every wake. */
   outputWaiters: Set<() => void>;
 }
 
 export interface JobReadResult {
   output: string;
+  /** Total bytes ever in the buffer (pre-slice). Caller passes back as `since`. */
   byteLength: number;
   running: boolean;
   exitCode: number | null;

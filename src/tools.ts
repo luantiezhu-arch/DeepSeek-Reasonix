@@ -1,6 +1,7 @@
 import type { PauseGate } from "./core/pause-gate.js";
 import { truncateForModel, truncateForModelByTokens } from "./mcp/registry.js";
 import { analyzeSchema, flattenSchema, nestArguments } from "./repair/flatten.js";
+import { logToolCall } from "./tools/logger.js";
 import {
   type NormalizedToolRateLimitConfig,
   type ToolRateLimitOption,
@@ -197,6 +198,7 @@ export class ToolRegistry {
       rootDir?: string;
     } = {},
   ): Promise<string> {
+    const _startTs = Date.now();
     const tool = this._tools.get(name);
     if (!tool) {
       return JSON.stringify({ error: `unknown tool: ${name}` });
@@ -262,6 +264,7 @@ export class ToolRegistry {
         const short = await interceptor(name, args);
         if (typeof short === "string") {
           const guarded = this._noteGateRejection(name, fingerprint, short);
+          this._logIfReal(name, args, _startTs);
           return this._augmentResult(name, args, guarded);
         }
       } catch (err) {
@@ -352,7 +355,17 @@ export class ToolRegistry {
     }
 
     finalResult = this._noteGateRejection(name, fingerprint, finalResult);
+    this._logIfReal(name, args, _startTs);
     return this._augmentResult(name, args, finalResult);
+  }
+
+  /** Log every tool dispatch to .reasonix/logs/ for debugging. Silent on error to never break the dispatch. */
+  private _logIfReal(name: string, args: Record<string, unknown>, startTs: number): void {
+    try {
+      logToolCall(name, args, true, Date.now() - startTs);
+    } catch {
+      /* logging must never break tool dispatch */
+    }
   }
 
   private _augmentResult(name: string, args: Record<string, unknown>, result: string): string {

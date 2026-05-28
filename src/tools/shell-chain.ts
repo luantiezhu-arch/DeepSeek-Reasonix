@@ -7,23 +7,17 @@ import * as pathMod from "node:path";
 import { isDqEscape, killProcessTree, prepareSpawn, smartDecodeOutput } from "./shell.js";
 
 export type ChainOp = "|" | "||" | "&&" | ";";
-
 export type RedirectKind = ">" | ">>" | "<" | "2>" | "2>>" | "2>&1" | "&>";
-
 export interface Redirect {
   kind: RedirectKind;
-  /** File path resolved against the chain's cwd; empty for `2>&1`. */
   target: string;
 }
-
 export interface ChainSegment {
   argv: string[];
   redirects: Redirect[];
 }
-
 export interface CommandChain {
   segments: ChainSegment[];
-  /** length === segments.length - 1 */
   ops: ChainOp[];
 }
 
@@ -34,7 +28,6 @@ export class UnsupportedSyntaxError extends Error {
   }
 }
 
-/** Whitespace-bounded splitter — chain ops only count when they begin a token, so `--flag=1&2` stays literal. */
 function splitOnChainOps(cmd: string): { segs: string[]; ops: ChainOp[] } {
   const segs: string[] = [];
   const ops: ChainOp[] = [];
@@ -95,7 +88,6 @@ function splitOnChainOps(cmd: string): { segs: string[]; ops: ChainOp[] } {
   return { segs, ops };
 }
 
-/** Single-pass parser: extract argv + trailing/inline redirects from one segment string. */
 function parseSegment(segStr: string): ChainSegment {
   const argv: string[] = [];
   const redirects: Redirect[] = [];
@@ -108,9 +100,7 @@ function parseSegment(segStr: string): ChainSegment {
     if (pending) {
       redirects.push({ kind: pending, target: cur });
       pending = null;
-    } else {
-      argv.push(cur);
-    }
+    } else argv.push(cur);
     cur = "";
     curHasContent = false;
   };
@@ -118,15 +108,10 @@ function parseSegment(segStr: string): ChainSegment {
   while (i < segStr.length) {
     const ch = segStr[i]!;
     if (quote) {
-      if (ch === quote) {
-        quote = null;
-      } else if (quote === '"' && isDqEscape(ch, segStr[i + 1])) {
-        cur += segStr[++i] ?? "";
-        curHasContent = true;
-      } else {
-        cur += ch;
-        curHasContent = true;
-      }
+      if (ch === quote) quote = null;
+      else if (quote === '"' && isDqEscape(ch, segStr[i + 1])) cur += segStr[++i] ?? "";
+      else cur += ch;
+      curHasContent = true;
       i++;
       continue;
     }
@@ -150,30 +135,23 @@ function parseSegment(segStr: string): ChainSegment {
       else if (remaining.startsWith("2>")) matched = { op: "2>", len: 2 };
       else if (remaining.startsWith(">>")) matched = { op: ">>", len: 2 };
       else if (remaining.startsWith(">")) matched = { op: ">", len: 1 };
-      else if (remaining.startsWith("<<")) {
-        throw new UnsupportedSyntaxError(
-          'shell operator "<<" is not supported — heredoc / here-string is not implemented; pass input via a "<" file or the binary\'s --input flag',
-        );
-      } else if (remaining.startsWith("<")) matched = { op: "<", len: 1 };
+      else if (remaining.startsWith("<<"))
+        throw new UnsupportedSyntaxError('shell operator "<<" is not supported');
+      else if (remaining.startsWith("<")) matched = { op: "<", len: 1 };
       if (matched) {
-        if (pending !== null) {
+        if (pending !== null)
           throw new UnsupportedSyntaxError(
-            `redirect "${pending}" is missing a target file before "${matched.op}"`,
+            `redirect "${pending}" missing target before "${matched.op}"`,
           );
-        }
-        if (matched.op === "2>&1") {
-          redirects.push({ kind: "2>&1", target: "" });
-        } else {
-          pending = matched.op;
-        }
+        if (matched.op === "2>&1") redirects.push({ kind: "2>&1", target: "" });
+        else pending = matched.op;
         i += matched.len;
         continue;
       }
-      if (ch === "&") {
+      if (ch === "&")
         throw new UnsupportedSyntaxError(
-          'shell operator "&" is not supported — background runs need run_background, not run_command. Wrap a literal `&` arg in quotes.',
+          'shell operator "&" is not supported — use run_background',
         );
-      }
     }
     cur += ch;
     curHasContent = true;
@@ -182,16 +160,12 @@ function parseSegment(segStr: string): ChainSegment {
   if (quote) throw new Error(`unclosed ${quote} in command`);
   flush();
   if (pending) throw new UnsupportedSyntaxError(`redirect "${pending}" is missing a target file`);
-  if (argv.length === 0 && redirects.length > 0) {
-    throw new UnsupportedSyntaxError(
-      "redirect without a command — segment must have at least one program argument",
-    );
-  }
+  if (argv.length === 0 && redirects.length > 0)
+    throw new UnsupportedSyntaxError("redirect without a command");
   validateRedirectFds(redirects);
   return { argv, redirects };
 }
 
-/** stdin (`<`) ≤1, stdout (`>`/`>>`/`&>`) ≤1, stderr (`2>`/`2>>`/`&>`/`2>&1`) ≤1; reject conflicts. */
 function validateRedirectFds(redirects: readonly Redirect[]): void {
   let stdin = 0;
   let stdout = 0;
@@ -205,18 +179,14 @@ function validateRedirectFds(redirects: readonly Redirect[]): void {
       stderr++;
     }
   }
-  if (stdin > 1) throw new UnsupportedSyntaxError("multiple `<` stdin redirects in one segment");
-  if (stdout > 1)
-    throw new UnsupportedSyntaxError(
-      "multiple stdout redirects in one segment (`>` / `>>` / `&>` conflict)",
-    );
+  if (stdin > 1) throw new UnsupportedSyntaxError("multiple `<` stdin redirects");
+  if (stdout > 1) throw new UnsupportedSyntaxError("multiple stdout redirects");
   if (stderr > 1)
     throw new UnsupportedSyntaxError(
-      "multiple stderr redirects in one segment (`2>` / `2>>` / `&>` / `2>&1` conflict)",
+      "multiple stderr redirects (`2>` / `2>>` / `&>` / `2>&1` conflict)",
     );
 }
 
-/** Returns null on plain commands without redirects (caller takes the simple path). */
 export function parseCommandChain(cmd: string): CommandChain | null {
   const { segs, ops } = splitOnChainOps(cmd);
   const segments: ChainSegment[] = [];
@@ -234,23 +204,10 @@ export function parseCommandChain(cmd: string): CommandChain | null {
     }
     segments.push(parseSegment(trimmed));
   }
-  // Reject `cd` inside parsed chains — the executor cannot carry cwd
-  // changes between segments, and silently running the wrong directory
-  // is worse than rejecting early with clear guidance.
-  for (const seg of segments) {
-    const cmdName = seg.argv[0] ?? "";
-    if (cmdName.toLowerCase() === "cd") {
-      throw new UnsupportedSyntaxError(
-        "cd in parsed command chains does not change cwd for later segments. By default, run generated scripts from the directory where the script was written; do not assume an input/data directory is the cwd just because the task reads files there. Pass input/data paths as arguments unless the command truly depends on that cwd. For package tools, use command-native cwd flags such as `npm --prefix <dir> run <script>`, `git -C <dir> ...`, or `cargo -C <dir> ...`.",
-      );
-    }
-  }
-
   if (ops.length === 0 && segments[0]!.redirects.length === 0) return null;
   return { segments, ops };
 }
 
-/** Each segment must individually clear the allowlist for the chain to auto-run. */
 export function chainAllowed(
   chain: CommandChain,
   isAllowed: (segmentCmd: string) => boolean,
@@ -269,21 +226,16 @@ export interface ChainResult {
 
 interface ChainGroup {
   segments: ChainSegment[];
-  /** Op connecting the PREVIOUS group to THIS one (`||`, `&&`, `;`); null on the first group. */
   opBefore: Exclude<ChainOp, "|"> | null;
 }
 
-/** Pipe groups are runs of segments joined by `|`; sequential ops (`||`, `&&`, `;`) split them. */
 function groupChain(chain: CommandChain): ChainGroup[] {
   const groups: ChainGroup[] = [{ segments: [chain.segments[0]!], opBefore: null }];
   for (let i = 0; i < chain.ops.length; i++) {
     const op = chain.ops[i]!;
     const next = chain.segments[i + 1]!;
-    if (op === "|") {
-      groups[groups.length - 1]!.segments.push(next);
-    } else {
-      groups.push({ segments: [next], opBefore: op });
-    }
+    if (op === "|") groups[groups.length - 1]!.segments.push(next);
+    else groups.push({ segments: [next], opBefore: op });
   }
   return groups;
 }
@@ -301,6 +253,8 @@ export async function runChain(chain: CommandChain, opts: RunChainOptions): Prom
   const deadline = Date.now() + opts.timeoutSec * 1000;
   let lastExit: number | null = 0;
   let timedOut = false;
+  let cwd = opts.cwd;
+
   for (const group of groups) {
     if (group.opBefore === "&&" && lastExit !== 0) continue;
     if (group.opBefore === "||" && lastExit === 0) continue;
@@ -309,8 +263,28 @@ export async function runChain(chain: CommandChain, opts: RunChainOptions): Prom
       timedOut = true;
       break;
     }
+
+    // Handle cd X && cmd pattern: resolve directory, update cwd, skip spawning
+    const firstSeg = group.segments[0]!;
+    const firstCmd = firstSeg.argv[0] ?? "";
+    if (
+      firstCmd.toLowerCase() === "cd" &&
+      firstSeg.argv.length >= 2 &&
+      group.segments.length === 1
+    ) {
+      const target = pathMod.resolve(cwd, firstSeg.argv[1]!);
+      try {
+        lstatSync(target);
+        cwd = target;
+      } catch {
+        buf.push(Buffer.from(`cd: ${target}: No such directory\n`));
+        lastExit = 1;
+      }
+      continue;
+    }
+
     const result = await runPipeGroup(group.segments, {
-      cwd: opts.cwd,
+      cwd,
       timeoutMs: remainingMs,
       buf,
       signal: opts.signal,
@@ -325,7 +299,7 @@ export async function runChain(chain: CommandChain, opts: RunChainOptions): Prom
   const output = buf.toString();
   const truncated =
     output.length > opts.maxOutputChars
-      ? `${output.slice(0, opts.maxOutputChars)}\n\n[… truncated ${output.length - opts.maxOutputChars} chars …]`
+      ? `${output.slice(0, opts.maxOutputChars)}\n\n[—truncated ${output.length - opts.maxOutputChars} chars —]`
       : output;
   return { exitCode: lastExit, output: truncated, timedOut };
 }
@@ -334,31 +308,32 @@ interface PipeGroupResult {
   exitCode: number | null;
   timedOut: boolean;
 }
-
 interface PipeGroupOptions {
   cwd: string;
   timeoutMs: number;
   buf: OutputBuffer;
   signal?: AbortSignal;
 }
-
 interface SegmentStdio {
-  /** Input fd for `<` redirect, or null when reading from prev pipe / nothing. */
   stdinFd: number | null;
-  /** Output fd for `>`/`>>`/`&>` redirect, or null when writing to pipe / our buffer. */
   stdoutFd: number | null;
-  /** Output fd for `2>`/`2>>`/`&>` redirect, or null when default. */
   stderrFd: number | null;
   mergeStderrToStdout: boolean;
   toClose: number[];
 }
 
-/** Models reach for `2>nul` (Windows) and `2>/dev/null` (POSIX) interchangeably; without this the parser materializes a real `<cwd>/nul` file. */
+function expandEnvVars(argv: string[]): string[] {
+  return argv.map((token) =>
+    token
+      .replace(/\$(\w+)/g, (_m, name) => process.env[name] ?? _m)
+      .replace(/\$\{(\w+)\}/g, (_m, name) => process.env[name] ?? _m)
+      .replace(/%(\w+)%/g, (_m, name) => process.env[name] ?? _m),
+  );
+}
+
 export function isNullDeviceAlias(target: string): boolean {
   const lower = target.toLowerCase();
-  if (lower === "/dev/null") return true;
-  if (process.platform === "win32" && lower === "nul") return true;
-  return false;
+  return lower === "/dev/null" || (process.platform === "win32" && lower === "nul");
 }
 
 function pathIsUnder(child: string, parent: string): boolean {
@@ -374,11 +349,8 @@ function openFlags(mode: "r" | "w" | "a"): number {
 }
 
 function ensureUnderSandbox(path: string, sandboxRoot: string, target: string): void {
-  if (!pathIsUnder(path, sandboxRoot)) {
-    throw new Error(
-      `redirect target "${target}" resolves outside the workspace sandbox (${sandboxRoot})`,
-    );
-  }
+  if (!pathIsUnder(path, sandboxRoot))
+    throw new Error(`redirect target "${target}" escapes sandbox`);
 }
 
 function resolveRedirectTarget(target: string, cwd: string): string {
@@ -386,19 +358,15 @@ function resolveRedirectTarget(target: string, cwd: string): string {
   const sandboxRoot = realpathSync(lexicalRoot);
   const resolved = pathMod.resolve(lexicalRoot, target);
   ensureUnderSandbox(resolved, lexicalRoot, target);
-
   try {
     const stat = lstatSync(resolved);
-    if (stat.isSymbolicLink()) {
-      throw new Error(`redirect target "${target}" is a symbolic link`);
-    }
+    if (stat.isSymbolicLink()) throw new Error(`redirect target "${target}" is a symbolic link`);
     ensureUnderSandbox(realpathSync(resolved), sandboxRoot, target);
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
     if (code !== "ENOENT") throw err;
     ensureUnderSandbox(realpathSync(pathMod.dirname(resolved)), sandboxRoot, target);
   }
-
   return resolved;
 }
 
@@ -433,9 +401,7 @@ function openRedirects(redirects: readonly Redirect[], cwd: string): SegmentStdi
       bothFd = open(r.target, "w");
       stdoutFd = bothFd;
       stderrFd = bothFd;
-    } else if (r.kind === "2>&1") {
-      mergeStderrToStdout = true;
-    }
+    } else if (r.kind === "2>&1") mergeStderrToStdout = true;
   }
   return { stdinFd, stdoutFd, stderrFd, mergeStderrToStdout, toClose };
 }
@@ -456,11 +422,8 @@ async function runPipeGroup(
     killAll();
   }, opts.timeoutMs);
   const onAbort = () => killAll();
-  if (opts.signal?.aborted) {
-    onAbort();
-  } else {
-    opts.signal?.addEventListener("abort", onAbort, { once: true });
-  }
+  if (opts.signal?.aborted) onAbort();
+  else opts.signal?.addEventListener("abort", onAbort, { once: true });
   try {
     for (let i = 0; i < segments.length; i++) {
       const isFirst = i === 0;
@@ -468,6 +431,7 @@ async function runPipeGroup(
       const seg = segments[i]!;
       const io = openRedirects(seg.redirects, opts.cwd);
       allFds.push(...io.toClose);
+      seg.argv = expandEnvVars(seg.argv);
       const { bin, args, spawnOverrides } = prepareSpawn(seg.argv);
       const stdoutSpec = io.stdoutFd !== null ? io.stdoutFd : "pipe";
       const stderrSpec =
@@ -477,9 +441,6 @@ async function runPipeGroup(
         cwd: opts.cwd,
         shell: false,
         windowsHide: true,
-        // POSIX: detach so the child becomes its own process-group leader,
-        // allowing killProcessTree's neg-pid kill to terminate the whole
-        // pipe chain subtree instead of just the direct child.
         detached: process.platform !== "win32",
         env,
         stdio: [stdinSpec, stdoutSpec, stderrSpec],
@@ -512,18 +473,15 @@ async function runPipeGroup(
           prev.stderr.pipe(child.stdin!, { end: false });
           prev.stdout?.once("end", closeIfDone);
           prev.stderr.once("end", closeIfDone);
-        } else {
-          prev.stdout?.pipe(child.stdin!);
-        }
+        } else prev.stdout?.pipe(child.stdin!);
       }
-      if (child.stderr && io.stderrFd === null && !(io.mergeStderrToStdout && !isLast)) {
-        child.stderr.on("data", (chunk: Buffer | string) => opts.buf.push(toBuf(chunk)));
-      }
+      if (child.stderr && io.stderrFd === null && !(io.mergeStderrToStdout && !isLast))
+        child.stderr.on("data", (chunk) => opts.buf.push(toBuf(chunk)));
       if (isLast && child.stdout && io.stdoutFd === null) {
-        child.stdout.on("data", (chunk: Buffer | string) => opts.buf.push(toBuf(chunk)));
+        child.stdout.on("data", (chunk) => opts.buf.push(toBuf(chunk)));
         if (io.mergeStderrToStdout && child.stderr && io.stderrFd === null) {
           child.stderr.removeAllListeners("data");
-          child.stderr.on("data", (chunk: Buffer | string) => opts.buf.push(toBuf(chunk)));
+          child.stderr.on("data", (chunk) => opts.buf.push(toBuf(chunk)));
         }
       }
     }
@@ -547,11 +505,8 @@ async function runPipeGroup(
 function tryClose(fd: number): void {
   try {
     closeSync(fd);
-  } catch {
-    /* already closed by spawn handover or kernel */
-  }
+  } catch {}
 }
-
 function toBuf(chunk: Buffer | string): Buffer {
   return typeof chunk === "string" ? Buffer.from(chunk) : chunk;
 }

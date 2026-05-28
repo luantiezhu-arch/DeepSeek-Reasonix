@@ -23,6 +23,11 @@ import { QQChannel } from "../../qq/channel.js";
 import { ToolRegistry } from "../../tools.js";
 import { registerChoiceTool } from "../../tools/choice.js";
 import { registerMemoryTools } from "../../tools/memory.js";
+import { registerSendMessageTool } from "../../tools/send-message.js";
+import { registerSysInfoTool } from "../../tools/sysinfo.js";
+import { registerTaskBoardTool } from "../../tools/task-board/tool.js";
+import { registerToolSearchTool } from "../../tools/tool-search.js";
+import { registerWatchTool } from "../../tools/watch.js";
 import { registerWebTools } from "../../tools/web.js";
 import { stopAndSaveCpuProfile } from "../cpu-prof.js";
 import { markPhase } from "../startup-profile.js";
@@ -318,6 +323,11 @@ export async function chatCommand(opts: ChatOptions): Promise<void> {
     if (!tools) tools = new ToolRegistry({ rateLimit: loadToolRateLimit() });
     registerWebTools(tools);
   }
+  registerTaskBoardTool(tools!);
+  registerToolSearchTool(tools!);
+  registerSendMessageTool(tools!);
+  registerSysInfoTool(tools!);
+  registerWatchTool(tools!);
 
   // Memory tools — available in every session, not just code mode.
   // Chat-mode callers get global scope only; project scope requires

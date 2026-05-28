@@ -22,6 +22,7 @@ import { JobRegistry } from "../tools/jobs.js";
 import { registerMemoryTools } from "../tools/memory.js";
 import { registerPlanTool } from "../tools/plan.js";
 import { registerScaffoldTools } from "../tools/scaffold.js";
+import { registerSendMessageTool } from "../tools/send-message.js";
 import { registerShellTools } from "../tools/shell.js";
 import { type SkillInstalledHook, registerSkillTools } from "../tools/skills.js";
 import {
@@ -30,7 +31,11 @@ import {
   formatSubagentResult,
   spawnSubagent,
 } from "../tools/subagent.js";
+import { registerSysInfoTool } from "../tools/sysinfo.js";
+import { registerTaskBoardTool } from "../tools/task-board/tool.js";
 import { registerTodoTool } from "../tools/todo.js";
+import { registerToolSearchTool } from "../tools/tool-search.js";
+import { registerWatchTool } from "../tools/watch.js";
 import { registerWebTools } from "../tools/web.js";
 
 export interface CodeToolsetOpts {
@@ -89,6 +94,11 @@ export async function buildCodeToolset(opts: CodeToolsetOpts): Promise<CodeTools
   registerPlanTool(tools);
   registerChoiceTool(tools);
   registerTodoTool(tools);
+  registerTaskBoardTool(tools);
+  registerToolSearchTool(tools);
+  registerSendMessageTool(tools);
+  registerSysInfoTool(tools);
+  registerWatchTool(tools);
   registerScaffoldTools(tools, { projectRoot: opts.rootDir });
   if (searchEnabled()) {
     registerWebTools(tools);

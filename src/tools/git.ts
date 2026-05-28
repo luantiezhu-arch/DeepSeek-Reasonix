@@ -56,14 +56,17 @@ export function registerGitTool(registry: ToolRegistry): ToolRegistry {
       },
       required: ["command"],
     },
-    fn: async (args: {
-      command: string;
-      dir?: string;
-      count?: number;
-      message?: string;
-      staged?: boolean;
-      all?: boolean;
-    }) => {
+    fn: async (
+      args: {
+        command: string;
+        dir?: string;
+        count?: number;
+        message?: string;
+        staged?: boolean;
+        all?: boolean;
+      },
+      _ctx,
+    ) => {
       const cwd = args.dir ? pathMod.resolve(args.dir) : process.cwd();
 
       switch (args.command) {

@@ -1303,9 +1303,13 @@ export function registerWebTools(registry: ToolRegistry, opts: WebToolsOptions =
             !Object.keys(fetchOpts.headers).some((k) => k.toLowerCase() === "content-type"))
         ) {
           const trimmed = args.body.trim();
-          const looksLikeJson =
-            (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
-            (trimmed.startsWith("[") && trimmed.endsWith("]"));
+          let looksLikeJson = false;
+          try {
+            JSON.parse(trimmed);
+            looksLikeJson = true;
+          } catch {
+            /* not JSON */
+          }
           if (looksLikeJson) {
             if (!fetchOpts.headers) (fetchOpts as Record<string, unknown>).headers = {};
             (fetchOpts.headers as Record<string, string>)["Content-Type"] = "application/json";

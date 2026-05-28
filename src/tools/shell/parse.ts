@@ -9,6 +9,8 @@ import {
 
 /** Read-only reports + test runners whose failure mode is "exit 1 with output". */
 export const BUILTIN_ALLOWLIST: ReadonlyArray<string> = [
+  // Directory navigation (safe — handled by runChain, sandbox-enforced)
+  "cd",
   // Repo inspection
   "git status",
   "git diff",
@@ -315,9 +317,6 @@ export function isAllowed(
     return false;
   }
   if (argv.length === 0) return false;
-
-  // `cd` is handled by runChain (updates cwd without spawning), always safe
-  if (argv[0]!.toLowerCase() === "cd") return true;
 
   const allowlist = [...BUILTIN_ALLOWLIST, ...extra];
   for (const prefix of allowlist) {

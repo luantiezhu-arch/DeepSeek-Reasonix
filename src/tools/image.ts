@@ -6,7 +6,9 @@ import { readConfig } from "../config.js";
 import type { ToolRegistry } from "../tools.js";
 
 const DEFAULT_VISION_URL = "http://localhost:8000/v1/chat/completions";
-const DEFAULT_MASTER_KEY = "123";
+function getVisionKey(): string {
+  return process.env.VISION_API_KEY || process.env.MASTER_API_KEY || "";
+}
 const DEFAULT_PROMPT =
   "Describe this image in detail. Be specific about text, objects, layout, and colors.";
 
@@ -28,8 +30,8 @@ function mimeType(path: string): string {
 
 function loadVisionConfig(): { url: string; key: string } {
   const envUrl = process.env.VISION_PROXY_URL;
-  const envKey = process.env.VISION_PROXY_KEY || process.env.MASTER_API_KEY;
-  if (envUrl) return { url: envUrl, key: envKey ?? DEFAULT_MASTER_KEY };
+  const envKey = process.env.VISION_PROXY_KEY || getVisionKey();
+  if (envUrl) return { url: envUrl, key: envKey };
   try {
     const cfg = readConfig();
     const cfgUrl = (cfg as Record<string, unknown>).visionProxyUrl;
@@ -37,11 +39,11 @@ function loadVisionConfig(): { url: string; key: string } {
     if (typeof cfgUrl === "string" && cfgUrl) {
       return {
         url: cfgUrl,
-        key: typeof cfgKey === "string" && cfgKey ? cfgKey : DEFAULT_MASTER_KEY,
+        key: typeof cfgKey === "string" && cfgKey ? cfgKey : getVisionKey(),
       };
     }
   } catch {}
-  return { url: DEFAULT_VISION_URL, key: DEFAULT_MASTER_KEY };
+  return { url: DEFAULT_VISION_URL, key: getVisionKey() };
 }
 
 export function registerImageTool(registry: ToolRegistry): ToolRegistry {

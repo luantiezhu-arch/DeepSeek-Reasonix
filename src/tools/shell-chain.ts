@@ -252,6 +252,7 @@ export async function runChain(chain: CommandChain, opts: RunChainOptions): Prom
   const buf = new OutputBuffer(opts.maxOutputChars * 2 * 4);
   const deadline = Date.now() + opts.timeoutSec * 1000;
   let lastExit: number | null = 0;
+  const sandboxRoot = realpathSync(pathMod.resolve(opts.cwd));
   let timedOut = false;
   let cwd = opts.cwd;
 
@@ -274,8 +275,9 @@ export async function runChain(chain: CommandChain, opts: RunChainOptions): Prom
     ) {
       const target = pathMod.resolve(cwd, firstSeg.argv[1]!);
       try {
-        lstatSync(target);
-        cwd = target;
+        const realTarget = realpathSync(target);
+        ensureUnderSandbox(realTarget, sandboxRoot, firstSeg.argv[1]!);
+        cwd = realTarget;
       } catch {
         buf.push(Buffer.from(`cd: ${target}: No such directory\n`));
         lastExit = 1;

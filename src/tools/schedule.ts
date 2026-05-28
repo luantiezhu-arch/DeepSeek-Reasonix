@@ -44,7 +44,7 @@ interface ScheduledTask {
   id: number;
   cron: string;
   prompt: string;
-  nextRun: string | null; // ISO date of last/next match
+  lastMatch: string | null; // ISO date of last cron match (updated on check)
   createdAt: string;
 }
 
@@ -79,9 +79,9 @@ export function registerScheduleTool(registry: ToolRegistry): ToolRegistry {
   registry.register({
     name: "schedule",
     description:
-      "定时任务管理。支持创建 cron 任务、列出任务、删除任务。\n" +
+      "定时任务管理。支持创建 cron 任务、列出任务、删除任务、检查到期任务。\n" +
       "cron 格式: 5 字段 (分 时 日 月 周)，如 '*/5 * * * *' = 每5分钟, '30 14 * * *' = 每天14:30\n" +
-      "任务持久化到 ~/.reasonix/scheduled_tasks.json，跨会话保存。",
+      "check 仅检查不自动执行，需要 LLM 主动调用后根据返回结果执行对应任务。任务持久化到 ~/.reasonix/scheduled_tasks.json，跨会话保存。",
     parameters: {
       type: "object",
       properties: {
@@ -128,7 +128,7 @@ export function registerScheduleTool(registry: ToolRegistry): ToolRegistry {
             id: store.nextId++,
             cron: args.cron,
             prompt: args.prompt,
-            nextRun: now.toISOString(),
+            lastMatch: null,
             createdAt: now.toISOString(),
           };
           store.tasks.push(task);
@@ -144,7 +144,8 @@ export function registerScheduleTool(registry: ToolRegistry): ToolRegistry {
         }
 
         case "delete": {
-          if (!args.id) throw new Error("schedule: delete 需要 id 参数");
+          if (!args.id || !/^\d+$/.test(args.id))
+            throw new Error("schedule: delete 需要有效的数字 id 参数");
           const idx = store.tasks.findIndex((t) => t.id === Number.parseInt(args.id!));
           if (idx < 0) throw new Error(`schedule: 找不到任务 #${args.id}`);
           store.tasks.splice(idx, 1);
@@ -155,6 +156,8 @@ export function registerScheduleTool(registry: ToolRegistry): ToolRegistry {
         case "check": {
           const now = new Date();
           const due = store.tasks.filter((t) => matchCron(t.cron, now));
+          // Update lastMatch for matched tasks
+          for (const t of due) t.lastMatch = now.toISOString();
           if (due.length === 0) return "当前没有到期需要执行的任务。";
           return `到期任务 (${due.length} 个):\n${due.map((t) => `  #${t.id} ${t.cron} → ${t.prompt}`).join("\n")}`;
         }

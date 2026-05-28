@@ -7,6 +7,7 @@ import { smartDecodeOutput } from "./shell/exec.js";
 export function registerPowerShellTool(registry: ToolRegistry): ToolRegistry {
   registry.register({
     name: "powershell",
+    parallelSafe: false,
     description:
       "在 Windows 上原生执行 PowerShell 命令。支持复杂管线、对象操作和脚本。\n" +
       "自动处理 UTF-8 编码，避免中文乱码。仅 Windows 可用。",
@@ -24,7 +25,7 @@ export function registerPowerShellTool(registry: ToolRegistry): ToolRegistry {
       },
       required: ["command"],
     },
-    fn: async (args: { command: string; timeout?: number }) => {
+    fn: async (args: { command: string; timeout?: number }, ctx) => {
       if (process.platform !== "win32") {
         throw new Error("powershell: 仅在 Windows 上可用");
       }
@@ -49,6 +50,22 @@ export function registerPowerShellTool(registry: ToolRegistry): ToolRegistry {
           },
         );
 
+        let resolved = false;
+        const finish = (result: string) => {
+          if (resolved) return;
+          resolved = true;
+          clearTimeout(timer);
+          ctx?.signal?.removeEventListener("abort", onAbort);
+          resolve(result);
+        };
+        const fail = (err: Error) => {
+          if (resolved) return;
+          resolved = true;
+          clearTimeout(timer);
+          ctx?.signal?.removeEventListener("abort", onAbort);
+          reject(err);
+        };
+
         const chunks: Buffer[] = [];
         const errChunks: Buffer[] = [];
         child.stdout?.on("data", (chunk: Buffer) => chunks.push(chunk));
@@ -56,24 +73,29 @@ export function registerPowerShellTool(registry: ToolRegistry): ToolRegistry {
 
         const timer = setTimeout(() => {
           child.kill();
-          reject(new Error("powershell: 命令执行超时"));
+          fail(new Error("powershell: 命令执行超时"));
         }, timeoutMs);
 
+        const onAbort = () => {
+          child.kill();
+          fail(new Error("powershell: 命令已取消"));
+        };
+        if (ctx?.signal?.aborted) onAbort();
+        else ctx?.signal?.addEventListener("abort", onAbort, { once: true });
+
         child.on("close", (code) => {
-          clearTimeout(timer);
           const output = smartDecodeOutput(Buffer.concat(chunks));
           const errOutput = smartDecodeOutput(Buffer.concat(errChunks));
           const combined = [output, errOutput].filter(Boolean).join("\n").trim();
           if (code !== 0 && !combined) {
-            reject(new Error(`powershell: 命令以退出码 ${code} 结束`));
+            fail(new Error(`powershell: 命令以退出码 ${code} 结束`));
             return;
           }
-          resolve(combined || "(命令执行完毕，无输出)");
+          finish(combined || "(命令执行完毕，无输出)");
         });
 
         child.on("error", (err) => {
-          clearTimeout(timer);
-          reject(new Error(`powershell: ${err.message}`));
+          fail(new Error(`powershell: ${err.message}`));
         });
       });
     },

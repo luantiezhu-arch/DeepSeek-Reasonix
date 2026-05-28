@@ -34,7 +34,7 @@ function validateTodos(raw: unknown): TodoItem[] {
       throw new Error(`todo_write: todo #${i + 1} \`activeForm\` must be a non-empty string`);
     if (status !== "pending" && status !== "in_progress" && status !== "completed") {
       throw new Error(
-        `todo_write: todo #${i + 1} \`status\` must be one of pending|in_progress|completed`,
+        `todo_write: todo #${i + 1} \`status\` must be one of pending|in_progress|completed, got ${JSON.stringify(status)}`,
       );
     }
     if (status === "in_progress") {
@@ -68,7 +68,8 @@ function renderTodos(todos: TodoItem[]): string {
 
 /** Sync todo items to the task board store: creates new tasks for pending items that don't already have a matching task. */
 function syncToTaskBoard(todos: TodoItem[]): void {
-  const existing = listTasks({ column: "todo" });
+  // Check all columns — avoid creating duplicates when title exists in another column
+  const existing = listTasks({});
   const existingTitles = new Set(existing.map((t) => t.title));
   for (const item of todos) {
     if (item.status === "pending" && !existingTitles.has(item.content)) {
@@ -117,8 +118,9 @@ export function registerTodoTool(registry: ToolRegistry, opts: TodoToolOptions =
       // Sync new pending items to the task board
       try {
         syncToTaskBoard(todos);
-      } catch {
-        /* silent */
+      } catch (err) {
+        // Non-critical — task board sync failure shouldn't block todo_write
+        console.error("todo_write: task board sync failed:", err);
       }
       opts.onTodosUpdated?.(todos);
       return renderTodos(todos);

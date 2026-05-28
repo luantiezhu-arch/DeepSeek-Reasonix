@@ -1,11 +1,22 @@
-/** send_message — push a message to the user. */
+/** send_message — push a message to the user. Optionally wires external notification (QQ, etc). */
 
 import type { ToolRegistry } from "../tools.js";
+
+/** Global notify hook — set by chat.tsx / App.tsx when QQ channel is available. */
+let _notifyHook: ((message: string, level: string) => void) | null = null;
+
+/** Wire an external notification channel (e.g. QQ sendResponse) to send_message. */
+export function setSendMessageNotify(
+  hook: ((message: string, level: string) => void) | null,
+): void {
+  _notifyHook = hook;
+}
 
 export function registerSendMessageTool(registry: ToolRegistry): ToolRegistry {
   registry.register({
     name: "send_message",
-    description: "向用户推送一条消息。适合后台任务完成通知、提醒等场景。消息会直接显示在聊天中。",
+    description:
+      "向用户推送一条消息。适合后台任务完成通知、提醒等场景。如果绑定了 QQ，也会自动推送到 QQ。",
     readOnly: true,
     parameters: {
       type: "object",
@@ -29,7 +40,10 @@ export function registerSendMessageTool(registry: ToolRegistry): ToolRegistry {
         warning: "⚠️",
         error: "❌",
       };
-      const icon = icons[args.level ?? "info"] ?? "ℹ️";
+      const level = args.level ?? "info";
+      const icon = icons[level] ?? "ℹ️";
+      // Fire external notification (QQ, etc.) asynchronously
+      _notifyHook?.(args.message, level);
       return `${icon} ${args.message}`;
     },
   });

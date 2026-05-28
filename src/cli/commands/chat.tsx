@@ -27,7 +27,7 @@ import { registerImageTool } from "../../tools/image.js";
 import { registerMemoryTools } from "../../tools/memory.js";
 import { registerPowerShellTool } from "../../tools/powershell.js";
 import { registerScheduleTool } from "../../tools/schedule.js";
-import { registerSendMessageTool } from "../../tools/send-message.js";
+import { registerSendMessageTool, setSendMessageNotify } from "../../tools/send-message.js";
 import { registerSleepTool } from "../../tools/sleep.js";
 import { registerSysInfoTool } from "../../tools/sysinfo.js";
 import { registerTaskBoardTool } from "../../tools/task-board/tool.js";
@@ -384,6 +384,10 @@ export async function chatCommand(opts: ChatOptions): Promise<void> {
     try {
       await channel.start();
       qqChannel = channel;
+      // Wire send_message → QQ push
+      setSendMessageNotify((_msg, _level) => {
+        qqChannel.sendResponse(`${_msg}`).catch(() => {});
+      });
       process.stderr.write("QQ bot connected\n");
     } catch (err) {
       process.stderr.write(`QQ bot failed: ${(err as Error).message}\n`);

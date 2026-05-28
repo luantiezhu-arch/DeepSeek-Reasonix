@@ -1264,12 +1264,42 @@ export function registerWebTools(registry: ToolRegistry, opts: WebToolsOptions =
       type: "object",
       properties: {
         url: { type: "string", description: "Absolute http:// or https:// URL." },
+        method: {
+          type: "string",
+          enum: ["GET", "POST", "PUT", "DELETE", "PATCH"],
+          description: "HTTP method. Default GET.",
+        },
+        body: { type: "string", description: "Request body for POST/PUT/PATCH." },
+        headers: {
+          type: "string",
+          description: 'Extra HTTP headers as JSON, e.g. {"Authorization":"Bearer xxx"}.',
+        },
       },
       required: ["url"],
     },
-    fn: async (args: { url: string }, ctx) => {
+    fn: async (args: { url: string; method?: string; body?: string; headers?: string }, ctx) => {
       if (!/^https?:\/\//i.test(args.url)) {
         throw new Error(t("webErrors.fetchInvalidUrl"));
+      }
+      // If custom method/body/headers specified, use direct fetch
+      if (args.method && args.method !== "GET") {
+        const fetchOpts: RequestInit & { headers?: Record<string, string> } = {
+          method: args.method,
+        };
+        if (args.body) fetchOpts.body = args.body;
+        if (args.headers) {
+          try {
+            fetchOpts.headers = JSON.parse(args.headers) as Record<string, string>;
+          } catch {
+            throw new Error("web_fetch: headers 必须是有效的 JSON 对象字符串");
+          }
+        }
+        const resp = await fetch(args.url, { ...fetchOpts, signal: ctx?.signal });
+        const text = await resp.text();
+        const max = 32000;
+        return text.length > max
+          ? `${text.slice(0, max)}\n\n[—truncated ${text.length - max} chars —]`
+          : text;
       }
       if (loadWebSearchEngine(opts.configPath) === "ollama") {
         const page = await webFetchOllama(args.url, {

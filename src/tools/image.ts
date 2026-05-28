@@ -1,4 +1,4 @@
-/** view_image — analyze a local image via deepseek-vision proxy. */
+/** view_image — analyze a local image via deepseek-vision proxy. Supports follow-up queries. */
 
 import { readFileSync } from "node:fs";
 import { extname, resolve } from "node:path";
@@ -19,18 +19,17 @@ const MIME_MAP: Record<string, string> = {
   ".bmp": "image/bmp",
 };
 
+let _lastImagePath = "";
+
 function mimeType(path: string): string {
   const ext = extname(path).toLowerCase();
   return MIME_MAP[ext] ?? "image/png";
 }
 
 function loadVisionConfig(): { url: string; key: string } {
-  // 1. Environment variables override everything
   const envUrl = process.env.VISION_PROXY_URL;
   const envKey = process.env.VISION_PROXY_KEY || process.env.MASTER_API_KEY;
   if (envUrl) return { url: envUrl, key: envKey ?? DEFAULT_MASTER_KEY };
-
-  // 2. Config file (~/.reasonix/config.json)
   try {
     const cfg = readConfig();
     const cfgUrl = (cfg as Record<string, unknown>).visionProxyUrl;
@@ -41,10 +40,7 @@ function loadVisionConfig(): { url: string; key: string } {
         key: typeof cfgKey === "string" && cfgKey ? cfgKey : DEFAULT_MASTER_KEY,
       };
     }
-  } catch {
-    // ignore config read errors — fall through to defaults
-  }
-
+  } catch {}
   return { url: DEFAULT_VISION_URL, key: DEFAULT_MASTER_KEY };
 }
 
@@ -52,7 +48,8 @@ export function registerImageTool(registry: ToolRegistry): ToolRegistry {
   registry.register({
     name: "view_image",
     description:
-      "Analyze a local image file and return a text description. Uses a vision AI model to describe the image content, including text, objects, layout, and colors. By default connects to a deepseek-vision proxy at localhost:8000. Set VISION_PROXY_URL env var or `visionProxyUrl` in config to override.",
+      "Analyze a local image file and return a text description. Uses a vision AI model (Qwen3.6-Flash via deepseek-vision proxy). " +
+      "Supports follow-up queries: after analyzing an image, you can ask more questions without specifying the path again.",
     readOnly: true,
     parameters: {
       type: "object",
@@ -60,27 +57,27 @@ export function registerImageTool(registry: ToolRegistry): ToolRegistry {
         path: {
           type: "string",
           description:
-            "Path to the image file. Supports absolute paths and paths relative to the workspace root. Formats: PNG, JPEG, WebP, GIF, BMP.",
+            "Path to the image file. Can be omitted on follow-up queries — reuses the last image.",
         },
         prompt: {
           type: "string",
-          description:
-            "Optional. What to ask about the image. Be specific for best results. Default: describe in detail (text, objects, layout, colors).",
+          description: "What to ask about the image. Be specific for best results.",
         },
       },
-      required: ["path"],
     },
-    fn: async (args: { path: string; prompt?: string }) => {
+    fn: async (args: { path?: string; prompt?: string }) => {
       const { url: visionUrl, key: masterKey } = loadVisionConfig();
       const prompt = args.prompt ?? DEFAULT_PROMPT;
 
-      // Try absolute path first, then resolve as relative
-      let imagePath = args.path;
+      // Use provided path or fall back to last image
+      let imagePath = args.path ?? _lastImagePath;
+      if (!imagePath)
+        throw new Error("view_image: 请提供图片路径，或在分析过图片后不加 path 参数进行追问。");
+
       let imageBuffer: Buffer | null = null;
       try {
         imageBuffer = readFileSync(imagePath);
       } catch {
-        // Absolute path failed — try resolving against cwd/home
         for (const base of [process.cwd(), process.env.HOME ?? "", process.env.USERPROFILE ?? ""]) {
           if (!base) continue;
           try {
@@ -90,11 +87,10 @@ export function registerImageTool(registry: ToolRegistry): ToolRegistry {
           } catch {}
         }
       }
-      if (!imageBuffer) {
-        throw new Error(
-          `view_image: cannot read file "${args.path}" — file not found. Try using an absolute path like "C:\\Users\\...\\image.png".`,
-        );
-      }
+      if (!imageBuffer) throw new Error(`view_image: 找不到文件 "${args.path ?? _lastImagePath}"`);
+
+      // Remember for follow-up
+      _lastImagePath = imagePath;
 
       const base64 = imageBuffer.toString("base64");
       const mime = mimeType(imagePath);
@@ -104,10 +100,7 @@ export function registerImageTool(registry: ToolRegistry): ToolRegistry {
       try {
         resp = await fetch(visionUrl, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${masterKey}`,
-          },
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${masterKey}` },
           body: JSON.stringify({
             model: "deepseek-v4-flash",
             messages: [
@@ -125,28 +118,20 @@ export function registerImageTool(registry: ToolRegistry): ToolRegistry {
         });
       } catch (err) {
         throw new Error(
-          `view_image: failed to reach vision proxy at ${visionUrl} — is it running?\n  (${(err as Error).message})\n  Start it with: python D:\\Code\\deepseek-vision\\main.py`,
+          `view_image: 无法连接到视觉代理 ${visionUrl} — 是否在运行？\n  (${(err as Error).message})`,
         );
       }
 
       if (!resp.ok) {
         const text = await resp.text().catch(() => "");
-        throw new Error(
-          `view_image: proxy returned HTTP ${resp.status}${text ? ` — ${text}` : ""}`,
-        );
+        throw new Error(`view_image: 代理返回 HTTP ${resp.status}${text ? ` — ${text}` : ""}`);
       }
 
-      const data = (await resp.json()) as {
-        choices?: Array<{ message?: { content?: string } }>;
-      };
+      const data = (await resp.json()) as { choices?: Array<{ message?: { content?: string } }> };
       const content = data.choices?.[0]?.message?.content;
-
-      // Even with content:null, the proxy did its job — return what we have
       return (
         content ??
-        `[Vision proxy processed the image but returned no text content.
-Finish reason: ${(data.choices?.[0] as Record<string, unknown> | undefined)?.finish_reason ?? "unknown"}
-Try a more specific prompt (e.g. "What text is on the button?" instead of a generic description).`
+        `[视觉代理处理了图片但未返回文本内容。]\nFinish reason: ${(data.choices?.[0] as Record<string, unknown> | undefined)?.finish_reason ?? "unknown"}`
       );
     },
   });

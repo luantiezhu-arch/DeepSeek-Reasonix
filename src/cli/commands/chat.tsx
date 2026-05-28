@@ -23,8 +23,10 @@ import { QQChannel } from "../../qq/channel.js";
 import { ToolRegistry } from "../../tools.js";
 import { registerChoiceTool } from "../../tools/choice.js";
 import { registerGitTool } from "../../tools/git.js";
+import { registerImageTool } from "../../tools/image.js";
 import { registerMemoryTools } from "../../tools/memory.js";
 import { registerSendMessageTool } from "../../tools/send-message.js";
+import { registerSleepTool } from "../../tools/sleep.js";
 import { registerSysInfoTool } from "../../tools/sysinfo.js";
 import { registerTaskBoardTool } from "../../tools/task-board/tool.js";
 import { registerToolSearchTool } from "../../tools/tool-search.js";
@@ -324,6 +326,8 @@ export async function chatCommand(opts: ChatOptions): Promise<void> {
     if (!tools) tools = new ToolRegistry({ rateLimit: loadToolRateLimit() });
     registerWebTools(tools);
   }
+  registerImageTool(tools!);
+  registerSleepTool(tools!);
   registerTaskBoardTool(tools!);
   registerToolSearchTool(tools!);
   registerSendMessageTool(tools!);

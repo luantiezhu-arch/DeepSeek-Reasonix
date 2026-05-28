@@ -18,6 +18,7 @@ import { registerChoiceTool } from "../tools/choice.js";
 import { registerCodeQueryTools } from "../tools/code-query.js";
 import { registerFilesystemTools } from "../tools/filesystem.js";
 import { registerGitTool } from "../tools/git.js";
+import { registerImageTool } from "../tools/image.js";
 import { registerJavaSourceTool } from "../tools/java-source.js";
 import { JobRegistry } from "../tools/jobs.js";
 import { registerMemoryTools } from "../tools/memory.js";
@@ -26,6 +27,7 @@ import { registerScaffoldTools } from "../tools/scaffold.js";
 import { registerSendMessageTool } from "../tools/send-message.js";
 import { registerShellTools } from "../tools/shell.js";
 import { type SkillInstalledHook, registerSkillTools } from "../tools/skills.js";
+import { registerSleepTool } from "../tools/sleep.js";
 import {
   SHARED_SUBAGENT_SINK,
   type SubagentSink,
@@ -95,6 +97,8 @@ export async function buildCodeToolset(opts: CodeToolsetOpts): Promise<CodeTools
   registerPlanTool(tools);
   registerChoiceTool(tools);
   registerTodoTool(tools);
+  registerImageTool(tools);
+  registerSleepTool(tools);
   registerTaskBoardTool(tools);
   registerToolSearchTool(tools);
   registerSendMessageTool(tools);

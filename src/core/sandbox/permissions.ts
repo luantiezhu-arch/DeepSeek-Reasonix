@@ -30,20 +30,13 @@ export interface PermissionResult {
 /* ------------------------------------------------------------------ */
 
 function matchRule(cmd: string, rule: PermissionRule): boolean {
-  const cmdName = cmd.trim().split(/\s+/)[0]?.toLowerCase() ?? "";
-  if (rule.pattern.startsWith("cd")) {
-    // `cd` special handling — always allowed (resolved by runChain)
-    if (cmdName === "cd") return true;
-  }
   if (rule.wildcard) {
-    // pattern: "docker:*" matches "docker ps", "docker run ..."
     const prefix = rule.pattern.replace(/:?\*$/, "").toLowerCase();
     if (rule.pattern.endsWith("*")) {
-      return cmd.toLowerCase().startsWith(prefix) || cmdName === prefix;
+      return cmd.toLowerCase().startsWith(prefix);
     }
     return cmd.toLowerCase() === prefix;
   }
-  // Exact prefix match
   return cmd.toLowerCase().startsWith(rule.pattern.toLowerCase());
 }
 
@@ -55,62 +48,26 @@ export class PermissionStore {
   private rules: PermissionRule[] = [];
 
   constructor() {
-    // Built-in safe rules
-    this.addRule({
-      id: "builtin-readonly",
-      action: "allow",
-      pattern: "git status",
-      persistent: true,
-    });
-    this.addRule({
-      id: "builtin-readonly",
-      action: "allow",
-      pattern: "git diff",
-      persistent: true,
-    });
-    this.addRule({ id: "builtin-readonly", action: "allow", pattern: "git log", persistent: true });
-    this.addRule({ id: "builtin-readonly", action: "allow", pattern: "cd", persistent: true });
-    this.addRule({
-      id: "builtin-ro-npm",
-      action: "allow",
-      pattern: "npm run lint",
-      persistent: true,
-    });
-    this.addRule({
-      id: "builtin-ro-npm",
-      action: "allow",
-      pattern: "npm run test",
-      persistent: true,
-    });
-    this.addRule({
-      id: "builtin-ro-npx",
-      action: "allow",
-      pattern: "npx vitest run",
-      persistent: true,
-    });
-    this.addRule({ id: "builtin-ro-tsc", action: "allow", pattern: "npx tsc", persistent: true });
-    this.addRule({
-      id: "builtin-ro-biome",
-      action: "allow",
-      pattern: "npx biome check",
-      persistent: true,
-    });
-    this.addRule({
-      id: "builtin-ro-cargo",
-      action: "allow",
-      pattern: "cargo check",
-      persistent: true,
-    });
-    this.addRule({
-      id: "builtin-ro-cargo",
-      action: "allow",
-      pattern: "cargo test",
-      persistent: true,
+    // Each rule must have a unique id — duplicate ids overwrite
+    const patterns = [
+      "git status",
+      "git diff",
+      "git log",
+      "cd",
+      "npm run lint",
+      "npm run test",
+      "npx vitest run",
+      "npx tsc",
+      "npx biome check",
+      "cargo check",
+      "cargo test",
+    ];
+    patterns.forEach((pattern, i) => {
+      this.addRule({ id: `builtin-ro-${i}`, action: "allow", pattern, persistent: true });
     });
   }
 
   addRule(rule: PermissionRule): void {
-    // Replace existing rule with same id
     const idx = this.rules.findIndex((r) => r.id === rule.id);
     if (idx >= 0) this.rules[idx] = rule;
     else this.rules.push(rule);
@@ -128,13 +85,12 @@ export class PermissionStore {
   evaluate(cmd: string): PermissionResult {
     for (const rule of this.rules) {
       if (matchRule(cmd, rule)) {
-        return { action: rule.action, rule, message: `规则 "${rule.id}" → ${rule.action}: ${cmd}` };
+        return { action: rule.action, rule, message: `rule "${rule.id}" → ${rule.action}: ${cmd}` };
       }
     }
-    // Default: ask user
-    return { action: "ask", message: `无匹配规则，需要用户确认: ${cmd}` };
+    return { action: "ask", message: `no matching rule: ${cmd}` };
   }
 }
 
-/** Global permission store — imported and used by sandbox.ts. */
+/** Global singleton — used by sandbox.ts for permission checks. */
 export const globalPermissions = new PermissionStore();

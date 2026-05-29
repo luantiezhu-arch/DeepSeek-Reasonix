@@ -70,7 +70,7 @@ export function hasBinaryHijackEnvVar(cmd: string): string | null {
 /** Patterns that are almost certainly mistakes when typed by an LLM. */
 const DANGEROUS_PATTERNS: Array<{ pattern: RegExp; name: string }> = [
   // rm -rf /
-  { pattern: /\brm\s+(-rf?|-[rf]+\s)\s*\/\b/, name: "rm -rf / (filesystem root)" },
+  { pattern: /\brm\s+(-rf?\s|-[rf]+\s+)\s*\//, name: "rm -rf / (filesystem root)" },
   // dd if=/dev/random (destructive on disk)
   { pattern: /\bdd\s+if=/, name: "dd (direct disk write)" },
   // chmod / chown on system dirs

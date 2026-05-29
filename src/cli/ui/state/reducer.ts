@@ -1,3 +1,4 @@
+import type { LanguageCode } from "../../../i18n/types.js";
 import { extractToolExitCode } from "../tool-summary.js";
 import { elideFromCursor } from "./card-elision.js";
 import type {
@@ -122,8 +123,13 @@ export function reduce(state: AgentState, event: AgentEvent): AgentState {
         status: { ...state.status, network: event.state, networkDetail: event.detail },
       };
 
-    case "language.change":
-      return { ...state, lang: event.lang as any };
+    case "language.change": {
+      const valid: LanguageCode[] = ["EN", "zh-CN", "de", "ru", "ja"];
+      const lang = valid.includes(event.lang as LanguageCode)
+        ? (event.lang as LanguageCode)
+        : state.lang;
+      return { ...state, lang };
+    }
 
     case "session.update":
       return { ...state, status: { ...state.status, ...event.patch } };

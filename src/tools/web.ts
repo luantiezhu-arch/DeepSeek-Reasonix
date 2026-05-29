@@ -183,8 +183,12 @@ interface DohResponse {
   Answer?: DohAnswer[];
 }
 
+/** DoH endpoint — configure via REASONIX_DOH_URL env var. Default: no DoH fallback (system DNS only). */
+const DOH_ENDPOINT = process.env.REASONIX_DOH_URL;
+
 async function dohResolve(host: string): Promise<string[]> {
-  const url = new URL("https://1.1.1.1/dns-query");
+  if (!DOH_ENDPOINT) throw new Error("DoH not configured"); // skip silently, caller handles
+  const url = new URL(DOH_ENDPOINT);
   url.searchParams.set("name", host);
   url.searchParams.set("type", "A");
 
@@ -228,12 +232,15 @@ async function assertPublicHttpUrl(rawUrl: string): Promise<URL> {
 
   if (sysAddrs.some(isInternalAddress)) {
     // System DNS returned fake/internal addresses (e.g. TUN Fake-IP) —
-    // fall back to DoH to get the real public IPs
-    const dohAddrs = await dohResolve(host).catch(() => null);
-    if (!dohAddrs || dohAddrs.some(isInternalAddress)) {
-      throw new Error(`web_fetch refuses internal or reserved host: ${host}`);
+    // fall back to DoH (if configured) to get the real public IPs
+    if (DOH_ENDPOINT) {
+      const dohAddrs = await dohResolve(host).catch(() => null);
+      if (!dohAddrs || dohAddrs.some(isInternalAddress)) {
+        throw new Error(`web_fetch refuses internal or reserved host: ${host}`);
+      }
+      // DoH resolved to public IPs → host is legitimate
     }
-    // DoH resolved to public IPs → host is legitimate
+    // If no DoH endpoint configured, accept system DNS result
   }
 
   return url;

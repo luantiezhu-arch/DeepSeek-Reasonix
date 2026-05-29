@@ -16,8 +16,8 @@
  *   box.cleanup(); // kills process + removes temp dir
  */
 
-import { type ChildProcess, type SpawnOptions, spawn } from "node:child_process";
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { type ChildProcess, type SpawnOptions, spawn, spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type PermissionAction, type PermissionResult, globalPermissions } from "./permissions.js";
@@ -88,11 +88,14 @@ export class Sandbox {
     };
   }
 
-  /** Create temp directory if isolation requested. */
+  /** Create temp directory if isolation requested. Auto-cleaned on process exit. */
   init(): void {
     if (this.options.isolate && !this.tempDir) {
-      this.tempDir = join(tmpdir(), `reasonix-sandbox-${process.pid}-${Date.now()}`);
-      mkdirSync(this.tempDir, { recursive: true });
+      this.tempDir = mkdtempSync(join(tmpdir(), "reasonix-sandbox-"));
+      // Auto-cleanup on unexpected exit (crash, kill)
+      const cleanupSelf = () => this.cleanup();
+      process.once("exit", cleanupSelf);
+      process.once("SIGTERM", cleanupSelf);
     }
   }
 
@@ -195,7 +198,6 @@ export class Sandbox {
     if (!child.pid || child.killed) return;
     try {
       if (process.platform === "win32") {
-        const { spawnSync } = require("node:child_process") as typeof import("node:child_process");
         spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], {
           stdio: "ignore",
           windowsHide: true,

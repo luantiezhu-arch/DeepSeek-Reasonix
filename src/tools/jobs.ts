@@ -115,7 +115,7 @@ export class JobRegistry {
       cwd: pathMod.resolve(opts.cwd),
       shell: false,
       windowsHide: true,
-      env: process.env,
+      env: { ...process.env, PYTHONIOENCODING: "utf-8", PYTHONUTF8: "1" },
       detached: process.platform !== "win32",
       ...spawnOverrides,
     };

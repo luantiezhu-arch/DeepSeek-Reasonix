@@ -3,19 +3,28 @@
 import { execFile } from "node:child_process";
 import * as pathMod from "node:path";
 import { promisify } from "node:util";
-import type { ToolRegistry } from "../tools.js";
+import type { ToolCallContext, ToolRegistry } from "../tools.js";
 
 const execFileAsync = promisify(execFile);
 
-/** Run a git command and return stdout. */
-async function git(args: string[], cwd: string): Promise<string> {
-  const { stdout } = await execFileAsync("git", args, {
-    cwd,
-    timeout: 15_000,
-    encoding: "utf-8",
-    maxBuffer: 2 * 1024 * 1024,
-  });
-  return stdout.trim();
+/** Run a git command and return stdout. Supports AbortSignal via ctx. */
+async function git(args: string[], cwd: string, signal?: AbortSignal): Promise<string> {
+  const ac = new AbortController();
+  const onAbort = () => ac.abort();
+  signal?.addEventListener("abort", onAbort, { once: true });
+
+  try {
+    const { stdout } = await execFileAsync("git", args, {
+      cwd,
+      timeout: 15_000,
+      encoding: "utf-8",
+      maxBuffer: 2 * 1024 * 1024,
+      signal: ac.signal,
+    });
+    return stdout.trim();
+  } finally {
+    signal?.removeEventListener("abort", onAbort);
+  }
 }
 
 export function registerGitTool(registry: ToolRegistry): ToolRegistry {
@@ -65,20 +74,21 @@ export function registerGitTool(registry: ToolRegistry): ToolRegistry {
         staged?: boolean;
         all?: boolean;
       },
-      _ctx,
+      ctx,
     ) => {
+      const signal = ctx?.signal;
       const cwd = args.dir ? pathMod.resolve(args.dir) : process.cwd();
 
       switch (args.command) {
         case "status": {
-          const short = await git(["status", "--short"], cwd);
+          const short = await git(["status", "--short"], cwd, signal);
           if (!short) {
-            const branch = await git(["rev-parse", "--abbrev-ref", "HEAD"], cwd).catch(
+            const branch = await git(["rev-parse", "--abbrev-ref", "HEAD"], cwd, signal).catch(
               () => "unknown",
             );
             return `当前分支: ${branch}\n\n工作区干净，没有未暂存的变更。`;
           }
-          const branch = await git(["rev-parse", "--abbrev-ref", "HEAD"], cwd).catch(
+          const branch = await git(["rev-parse", "--abbrev-ref", "HEAD"], cwd, signal).catch(
             () => "unknown",
           );
           const staged: string[] = [];
@@ -106,7 +116,7 @@ export function registerGitTool(registry: ToolRegistry): ToolRegistry {
           const argsList = ["diff", "--no-color"];
           if (args.staged) argsList.push("--cached");
           try {
-            const out = await git(argsList, cwd);
+            const out = await git(argsList, cwd, signal);
             if (!out) return "没有变更。";
             // Truncate very large diffs
             if (out.length > 8000)
@@ -121,7 +131,7 @@ export function registerGitTool(registry: ToolRegistry): ToolRegistry {
           const count = Math.min(50, Math.max(1, args.count ?? 10));
           const format = "--format=%h %ai %an  %s";
           try {
-            const out = await git(["log", `-${count}`, format, "--no-color"], cwd);
+            const out = await git(["log", `-${count}`, format, "--no-color"], cwd, signal);
             if (!out) return "没有提交记录。";
             return out;
           } catch {
@@ -132,8 +142,8 @@ export function registerGitTool(registry: ToolRegistry): ToolRegistry {
         case "commit": {
           if (!args.message) throw new Error("git: commit 需要 message 参数");
           try {
-            if (args.all) await git(["add", "-A"], cwd);
-            const out = await git(["commit", "-m", args.message], cwd);
+            if (args.all) await git(["add", "-A"], cwd, signal);
+            const out = await git(["commit", "-m", args.message], cwd, signal);
             return out;
           } catch (err) {
             throw new Error(`git: 提交失败 — ${(err as Error).message}`);
@@ -142,7 +152,7 @@ export function registerGitTool(registry: ToolRegistry): ToolRegistry {
 
         case "branch": {
           try {
-            const out = await git(["branch", "-a"], cwd);
+            const out = await git(["branch", "-a"], cwd, signal);
             if (!out) return "没有分支。";
             return out;
           } catch {

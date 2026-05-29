@@ -1,8 +1,31 @@
 /** watch — watch files/directories for changes. */
 
 import { watch } from "node:fs";
-import { resolve } from "node:path";
+import { resolve as pathResolve } from "node:path";
 import type { ToolRegistry } from "../tools.js";
+
+/** Reject obvious system paths that shouldn't be watched. */
+function rejectSystemPaths(p: string): void {
+  const normalized = p.toLowerCase().replace(/\\/g, "/");
+  const dangerous = [
+    "/etc",
+    "/bin",
+    "/sbin",
+    "/usr",
+    "/boot",
+    "/dev",
+    "/proc",
+    "/sys",
+    "/windows",
+    "/windows/system32",
+    "/system volume information",
+  ];
+  for (const d of dangerous) {
+    if (normalized.startsWith(`${d}/`) || normalized === d) {
+      throw new Error(`[watch] 不支持的监控目标: ${pathResolve(p, "..")} (系统关键路径)`);
+    }
+  }
+}
 
 export function registerWatchTool(registry: ToolRegistry): ToolRegistry {
   registry.register({
@@ -28,7 +51,8 @@ export function registerWatchTool(registry: ToolRegistry): ToolRegistry {
       required: ["path"],
     },
     fn: async (args: { path: string; timeout?: number; pattern?: string }, ctx) => {
-      const watchPath = resolve(args.path);
+      const watchPath = pathResolve(args.path);
+      rejectSystemPaths(watchPath);
       const timeoutMs = Math.min(300_000, Math.max(5_000, (args.timeout ?? 60) * 1000));
       const pattern = args.pattern ? args.pattern.toLowerCase() : null;
 

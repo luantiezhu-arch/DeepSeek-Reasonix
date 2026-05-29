@@ -82,33 +82,16 @@ export async function runCommand(
   const { bin, args, spawnOverrides } = prepareSpawn(expandedArgv, { env: normalizedEnv });
   const effectiveSpawnOpts = { ...spawnOpts, ...spawnOverrides };
 
-  return await new Promise<RunCommandResult>((resolve, reject) => {
-    let child: import("node:child_process").ChildProcess;
-    try {
-      child = spawn(bin, args, effectiveSpawnOpts);
-    } catch (err) {
-      reject(err);
-      return;
-    }
-    // Collect raw Buffer chunks rather than decoding incrementally —
-    // a multi-byte sequence can land split across chunks, and a naïve
-    // chunk.toString() corrupts it before the second half arrives.
-    // Decode once at close time via smartDecodeOutput which handles
-    // GBK fallback on Windows. 2× byte cap avoids OOM on chatty output.
+  // Sandbox wraps spawn with consistent kill + timeout + env handling
+  const { Sandbox } = await import("../../core/sandbox/sandbox.js");
+  const sbox = new Sandbox({ timeoutMs, maxOutputBytes: maxChars * 2 });
+  const { child } = sbox.spawn(bin, args, effectiveSpawnOpts);
+
+  return new Promise<RunCommandResult>((resolve, reject) => {
     const chunks: Buffer[] = [];
     let totalBytes = 0;
     const byteCap = maxChars * 2 * 4; // worst-case 4 bytes/char
-    let timedOut = false;
-    let aborted = false;
-    const killChildTree = () => killProcessTree(child);
-    const killTimer = setTimeout(() => {
-      timedOut = true;
-      killChildTree();
-    }, timeoutMs);
-    const onAbort = () => {
-      aborted = true;
-      killChildTree();
-    };
+    const onAbort = () => sbox.kill(child);
     if (opts.signal?.aborted) onAbort();
     else opts.signal?.addEventListener("abort", onAbort, { once: true });
 
@@ -127,12 +110,11 @@ export async function runCommand(
     child.stdout?.on("data", onData);
     child.stderr?.on("data", onData);
     child.on("error", (err) => {
-      clearTimeout(killTimer);
       opts.signal?.removeEventListener("abort", onAbort);
+      sbox.cleanup();
       reject(err);
     });
     child.on("close", (code) => {
-      clearTimeout(killTimer);
       opts.signal?.removeEventListener("abort", onAbort);
       const merged = Buffer.concat(chunks);
       const buf = smartDecodeOutput(merged);
@@ -140,7 +122,7 @@ export async function runCommand(
         buf.length > maxChars
           ? `${buf.slice(0, maxChars)}\n\n[—truncated ${buf.length - maxChars} chars —]`
           : buf;
-      resolve({ exitCode: code, output, timedOut });
+      resolve({ exitCode: code, output, timedOut: sbox.timedOut });
     });
   });
 }

@@ -531,9 +531,9 @@ describe("registerShellTools — dispatch integration", () => {
   it("registers run_command + background tools", () => {
     const registry = new ToolRegistry();
     registerShellTools(registry, { rootDir: tmp });
-    // run_command (sync) + run_background / job_output / wait_for_job /
-    // stop_job / list_jobs (background family).
-    expect(registry.size).toBe(6);
+    // run_command (sync) + run_background + job_output + wait_for_job +
+    // job_stream + stop_job + list_jobs (background family).
+    expect(registry.size).toBe(7);
     expect(registry.has("run_command")).toBe(true);
     expect(registry.has("run_background")).toBe(true);
     expect(registry.has("job_output")).toBe(true);

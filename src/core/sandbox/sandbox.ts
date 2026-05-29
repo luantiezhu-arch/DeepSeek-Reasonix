@@ -76,6 +76,8 @@ export class Sandbox {
   private tempDir: string | null = null;
   private children: ChildProcess[] = [];
   private cleaned = false;
+  /** True when the hard timeout fired. Read after exec()/waitFor() to check for timeout exit. */
+  timedOut = false;
 
   constructor(options: SandboxOptions = {}) {
     this.options = {
@@ -184,8 +186,8 @@ export class Sandbox {
     // Hard timeout
     if (this.options.timeoutMs && this.options.timeoutMs > 0) {
       const timer = setTimeout(() => {
+        this.timedOut = true;
         this.kill(child);
-        timer.ref();
       }, this.options.timeoutMs);
       child.on("close", () => clearTimeout(timer));
     }

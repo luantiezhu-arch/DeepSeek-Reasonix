@@ -94,6 +94,10 @@ export {
   registerPlanTool,
 } from "./tools/plan.js";
 export type { PlanStep, PlanStepRisk, PlanToolOptions, StepCompletion } from "./tools/plan.js";
+export { Sandbox } from "./core/sandbox/sandbox.js";
+export { checkCommandSafety } from "./core/sandbox/security.js";
+export { globalPermissions } from "./core/sandbox/permissions.js";
+export type { PermissionRule, PermissionResult } from "./core/sandbox/permissions.js";
 export { registerPowerShellTool } from "./tools/powershell.js";
 export { registerSendMessageTool, setSendMessageNotify } from "./tools/send-message.js";
 export { registerScheduleTool } from "./tools/schedule.js";

@@ -35,7 +35,13 @@ export interface RunCommandResult {
 
 export async function runCommand(
   cmd: string,
-  opts: { cwd: string; timeoutSec?: number; maxOutputChars?: number; signal?: AbortSignal },
+  opts: {
+    cwd: string;
+    timeoutSec?: number;
+    maxOutputChars?: number;
+    signal?: AbortSignal;
+    env?: NodeJS.ProcessEnv;
+  },
 ): Promise<RunCommandResult> {
   const timeoutSec = opts.timeoutSec ?? DEFAULT_TIMEOUT_SEC;
   const maxChars = opts.maxOutputChars ?? DEFAULT_MAX_OUTPUT_CHARS;
@@ -60,7 +66,7 @@ export async function runCommand(
     // PYTHONIOENCODING + PYTHONUTF8 force Python children to emit UTF-8
     // on stdout. Without this, CJK Windows defaults to GBK and
     // print("…") raises UnicodeEncodeError on non-GBK chars.
-    env: { ...normalizedEnv, PYTHONIOENCODING: "utf-8", PYTHONUTF8: "1" },
+    env: opts.env ?? { ...normalizedEnv, PYTHONIOENCODING: "utf-8", PYTHONUTF8: "1" },
   };
 
   // Expand $VAR, ${VAR}, and %VAR% AFTER allowlist check.

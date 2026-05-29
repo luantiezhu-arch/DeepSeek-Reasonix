@@ -87,7 +87,7 @@ export function registerShellTools(registry: ToolRegistry, opts: ShellToolsOptio
   registry.register({
     name: "run_command",
     description:
-      'Run a shell command in the project root; returns combined stdout+stderr. Allowlisted read-only / test / lint / typecheck commands run immediately; mutating / network / install commands gate on user confirmation.\n\nDO NOT use run_command for file operations — use write_file, edit_file, multi_edit, copy_file, move_file, or delete_file instead. Shell utilities (echo, cp, sed, cat, tee, perl, python -c, etc.) bypass validation, lack rollback, and will trigger user confirmation gates that waste turns.\n\nNo real shell — argv parsed natively for cross-platform parity:\n• Supported: chains `|`/`||`/`&&`/`;` (each segment allowlist-checked) and file redirects `>`/`>>`/`<`/`2>`/`2>>`/`2>&1`/`&>`, `cd X && cmd` pattern (updates cwd for the rest of the chain), and `$VAR`/`${VAR}`/`%VAR%` environment variable expansion.\n• Rejected: background `&`, heredoc `<<`, `$(…)`, subshells. Quote operator chars as literals (`grep "a|b" file`).\n• `cd` updates the working directory for subsequent commands in the same chain — use it for running scripts in subdirectories. For package tools, prefer `npm --prefix <dir>`, `git -C <dir>`, `cargo -C <dir>`.\n• Filter at source — `grep -c` / `wc -l` / narrower paths over unbounded dumps.',
+      'Run a shell command in the project root; returns combined stdout+stderr. Allowlisted read-only / test / lint / typecheck commands run immediately; mutating / network / install commands gate on user confirmation.\n\nDO NOT use run_command for file operations — use write_file, edit_file, multi_edit, copy_file, move_file, or delete_file instead. Shell utilities (echo, cp, sed, cat, tee, perl, python -c, etc.) bypass validation, lack rollback, and will trigger user confirmation gates that waste turns.\n\nNo real shell — argv parsed natively for cross-platform parity:\n• Supported: chains `|`/`||`/`&&`/`;` (each segment allowlist-checked) and file redirects `>`/`>>`/`<`/`2>`/`2>>`/`2>&1`/`&>`, `cd X && cmd` pattern (updates cwd for the rest of the chain), and `$VAR`/`${VAR}`/`%VAR%` environment variable expansion.\n• Rejected: background `&`, heredoc `<<`, `$(…)`, subshells. Quote operator chars as literals (`grep "a|b" file`).\n• `cd` updates the working directory for subsequent commands in the same chain — use it for running scripts in subdirectories. For package tools, prefer `npm --prefix <dir>`, `git -C <dir>`, `cargo -C <dir>`.\n• sandbox:true — 沙箱模式（临时目录 + 环境变量脱敏 + 安全检查 + 超时限制 + 自动清理）。\n• Filter at source — `grep -c` / `wc -l` / narrower paths over unbounded dumps.',
     // Plan-mode gate: allow allowlisted commands through (git status,
     // cargo check, ls, grep …) so the model can actually investigate
     // during planning. Anything that would otherwise trigger a
@@ -106,6 +106,11 @@ export function registerShellTools(registry: ToolRegistry, opts: ShellToolsOptio
           description:
             "Full command line. Quoting + chain/redirect rules per the top-level description.",
         },
+        sandbox: {
+          type: "boolean",
+          description:
+            "可选。启用沙箱模式：临时目录 + 环境变量脱敏 + 安全检查 + 超时限制。默认 false。",
+        },
         timeoutSec: {
           type: "integer",
           description: `Override the default ${timeoutSec}s timeout for a single command.`,
@@ -113,10 +118,36 @@ export function registerShellTools(registry: ToolRegistry, opts: ShellToolsOptio
       },
       required: ["command"],
     },
-    fn: async (args: { command: string; timeoutSec?: number }, ctx) => {
+    fn: async (args: { command: string; timeoutSec?: number; sandbox?: boolean }, ctx) => {
       const cmd = args.command.trim();
       if (!cmd) throw new Error("run_command: empty command");
       const effectiveTimeout = Math.max(1, Math.min(600, args.timeoutSec ?? timeoutSec));
+
+      // Sandbox mode: run with temp dir + env sanitization + security checks
+      if (args.sandbox) {
+        const { Sandbox } = await import("../core/sandbox/sandbox.js");
+        const sbox = new Sandbox({
+          isolate: true,
+          sanitizeEnv: true,
+          timeoutMs: effectiveTimeout * 1000,
+          maxOutputBytes: maxOutputChars,
+        });
+        // Pre-flight security check (throws on dangerous patterns)
+        sbox.preflight(cmd);
+        const cwd = sbox.getCwd(rootDir);
+        const env = sbox.buildEnv();
+        // Run in sandbox
+        const result = await runCommand(cmd, {
+          cwd,
+          timeoutSec: effectiveTimeout,
+          maxOutputChars,
+          signal: ctx?.signal,
+          env,
+        });
+        sbox.cleanup();
+        return formatCommandResult(cmd, result);
+      }
+
       if (
         !isAllowAll() &&
         !isCommandAllowed(cmd, getExtraAllowed(), rootDir, opts.sensitivePaths)

@@ -70,11 +70,14 @@ export async function runCommand(
   };
 
   // Expand $VAR, ${VAR}, and %VAR% AFTER allowlist check.
+  // Use the resolved env (sandbox-filtered or process.env) so
+  // sandbox mode doesn't leak stripped vars into command args.
+  const expandEnv = opts.env ?? process.env;
   const expandedArgv = argv.map((token) =>
     token
-      .replace(/\$(\w+)/g, (_m, name) => process.env[name] ?? _m)
-      .replace(/\$\{(\w+)\}/g, (_m, name) => process.env[name] ?? _m)
-      .replace(/%(\w+)%/g, (_m, name) => process.env[name] ?? _m),
+      .replace(/\$(\w+)/g, (_m, name) => expandEnv[name] ?? _m)
+      .replace(/\$\{(\w+)\}/g, (_m, name) => expandEnv[name] ?? _m)
+      .replace(/%(\w+)%/g, (_m, name) => expandEnv[name] ?? _m),
   );
   const { bin, args, spawnOverrides } = prepareSpawn(expandedArgv, { env: normalizedEnv });
   const effectiveSpawnOpts = { ...spawnOpts, ...spawnOverrides };

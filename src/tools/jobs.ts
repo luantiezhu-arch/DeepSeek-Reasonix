@@ -376,7 +376,7 @@ export class JobRegistry {
           job.child?.kill("SIGTERM");
         } catch {}
     }
-    const allClose = Promise.all(runningJobs.map((j) => j.readyPromise));
+    const allClose = Promise.all(runningJobs.map((j) => j.closedPromise));
     const elapsed = () => Date.now() - start;
     const graceMs = Math.min(1500, Math.max(0, deadlineMs / 2));
     await Promise.race([allClose, new Promise<void>((res) => setTimeout(res, graceMs))]);

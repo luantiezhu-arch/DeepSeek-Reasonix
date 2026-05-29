@@ -14,7 +14,7 @@ export interface TodoToolOptions {
 }
 
 const DESCRIPTION =
-  "In-session task tracker for 3+ step work. NOT a plan — no approval gate, no checkpoint, no files touched. Each call REPLACES the entire list (set semantics) — pass the FULL list. Exactly one item may be in_progress at a time; flip to completed the moment that step's done. Pass `[]` to clear. For approval gates use submit_plan; for branching choices use ask_choice.";
+  "In-session task tracker for 3+ step work. NOT a plan — no approval gate, no checkpoint. Each call REPLACES the entire list (set semantics) — pass the FULL list. Exactly one item may be in_progress at a time; flip to completed the moment that step's done. Pass `[]` to clear. For approval gates use submit_plan; for branching choices use ask_choice.";
 
 function validateTodos(raw: unknown): TodoItem[] {
   if (!Array.isArray(raw)) throw new Error("todo_write: `todos` must be an array");
@@ -118,9 +118,8 @@ export function registerTodoTool(registry: ToolRegistry, opts: TodoToolOptions =
       // Sync new pending items to the task board
       try {
         syncToTaskBoard(todos);
-      } catch (err) {
-        // Non-critical — task board sync failure shouldn't block todo_write
-        console.error("todo_write: task board sync failed:", err);
+      } catch {
+        /* task board sync is non-critical — disk full or permissions shouldn't kill todo */
       }
       opts.onTodosUpdated?.(todos);
       return renderTodos(todos);

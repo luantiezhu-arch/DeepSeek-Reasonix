@@ -98,6 +98,7 @@ function schedulerTick(): void {
     now.getHours() * 60 +
     now.getMinutes();
 
+  let modified = false;
   for (const task of store.tasks) {
     if (!matchCron(task.cron, now)) continue;
     const last = _lastFiredMinute.get(task.id);
@@ -106,6 +107,7 @@ function schedulerTick(): void {
     // Mark fired
     _lastFiredMinute.set(task.id, minuteKey);
     task.lastMatch = now.toISOString();
+    modified = true;
 
     // Fire notification via send_message if registry is available
     if (_registry?.has("send_message")) {
@@ -115,7 +117,7 @@ function schedulerTick(): void {
         .catch(() => {});
     }
   }
-  save(store);
+  if (modified) save(store);
 }
 
 /* ------------------------------------------------------------------ */
@@ -163,13 +165,17 @@ export function registerScheduleTool(registry: ToolRegistry): ToolRegistry {
             throw new Error("schedule: cron 格式错误，需要 5 字段 (分 时 日 月 周)");
 
           for (const part of parts) {
-            if (
-              part === "*" ||
-              /^\*\/\d+$/.test(part) ||
-              /^\d+-\d+$/.test(part) ||
-              /^\d+$/.test(part)
-            ) {
-              continue;
+            if (part === "*" || /^\d+$/.test(part)) continue;
+            const stepMatch = part.match(/^\*\/(\d+)$/);
+            if (stepMatch) {
+              if (Number.parseInt(stepMatch[1]!, 10) > 0) continue;
+              throw new Error(`schedule: cron 步进 "${part}" 无效（步进必须 >0）`);
+            }
+            const rangeMatch = part.match(/^(\d+)-(\d+)$/);
+            if (rangeMatch) {
+              if (Number.parseInt(rangeMatch[1]!, 10) <= Number.parseInt(rangeMatch[2]!, 10))
+                continue;
+              throw new Error(`schedule: cron 范围 "${part}" 无效（起始值须 ≤ 终止值）`);
             }
             throw new Error(`schedule: cron 字段 "${part}" 格式无效`);
           }

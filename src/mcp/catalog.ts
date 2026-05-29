@@ -50,6 +50,36 @@ export const MCP_CATALOG: CatalogEntry[] = [
     package: "@modelcontextprotocol/server-everything",
     note: "useful for debugging your Reasonix setup",
   },
+  {
+    name: "postgres",
+    summary: "read-only PostgreSQL schema inspector (needs DATABASE_URL)",
+    package: "@modelcontextprotocol/server-postgres",
+    note: "set DATABASE_URL in your env; read-only by default",
+  },
+  {
+    name: "sqlite",
+    summary: "query SQLite databases with read-only access",
+    package: "@modelcontextprotocol/server-sqlite",
+    userArgs: "<database.db>",
+    note: "read-only mode; file path required",
+  },
+  {
+    name: "slack",
+    summary: "read/search Slack channels (needs SLACK_BOT_TOKEN)",
+    package: "@modelcontextprotocol/server-slack",
+    note: "set SLACK_BOT_TOKEN in your env before spawning",
+  },
+  {
+    name: "brave-search",
+    summary: "web and local search via Brave Search API (needs BRAVE_API_KEY)",
+    package: "@modelcontextprotocol/server-brave-search",
+    note: "set BRAVE_API_KEY in your env; requires a Brave Search API account",
+  },
+  {
+    name: "sequential-thinking",
+    summary: "dynamic step-by-step reasoning for complex problems",
+    package: "@modelcontextprotocol/server-sequential-thinking",
+  },
 ];
 
 export function mcpCommandFor(entry: CatalogEntry): string {

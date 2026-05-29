@@ -314,6 +314,66 @@ export function registerShellTools(registry: ToolRegistry, opts: ShellToolsOptio
   });
 
   registry.register({
+    name: "job_stream",
+    description:
+      "Poll a background job for new output continuously until it exits.\n" +
+      "Returns new output each time the job writes data, or when it exits.\n" +
+      "Use this to watch real-time progress of long-running jobs (builds, downloads).\n" +
+      "Pass `since` (byteLength from previous call) to get only new content.\n" +
+      "Returns JSON with `exited`, `exitCode`, `latestOutput`, `byteLength`.",
+    readOnly: true,
+    parallelSafe: true,
+    stormExempt: true,
+    parameters: {
+      type: "object",
+      properties: {
+        jobId: { type: "integer", description: "Job id returned by run_background." },
+        since: {
+          type: "integer",
+          description: "Byte offset from previous call. Only returns new output after this point.",
+        },
+        maxPolls: {
+          type: "integer",
+          description: "Max poll iterations before returning (clamped 1-20, default 10).",
+        },
+      },
+      required: ["jobId"],
+    },
+    fn: async (args: { jobId: number; since?: number; maxPolls?: number }) => {
+      const maxPolls = Math.min(20, Math.max(1, args.maxPolls ?? 10));
+      let byteOffset = args.since ?? 0;
+      let latestOutput = "";
+
+      for (let i = 0; i < maxPolls; i++) {
+        const waited = await jobs.waitForJob(args.jobId, {
+          timeoutMs: 5000,
+          waitFor: "output-or-exit",
+        });
+        if (!waited) return `job ${args.jobId}: not found (use list_jobs)`;
+
+        const read = jobs.read(args.jobId, { since: byteOffset });
+        if (read) {
+          latestOutput = read.output;
+          byteOffset = read.byteLength;
+          if (latestOutput) break; // got new output, return it
+        }
+        if (waited.exited) break; // job exited, return final state
+      }
+
+      const read = jobs.read(args.jobId, { since: 0 });
+      const fullLen = read?.byteLength ?? 0;
+      const state = jobs.read(args.jobId, {});
+      return {
+        jobId: args.jobId,
+        exited: !state?.running,
+        exitCode: state?.exitCode ?? null,
+        latestOutput,
+        byteLength: fullLen,
+      };
+    },
+  });
+
+  registry.register({
     name: "stop_job",
     description:
       "Stop a background job started with `run_background`. SIGTERM first; SIGKILL after a short grace period if it doesn't exit cleanly. Returns the final output + exit code. Safe to call on an already-exited job.",

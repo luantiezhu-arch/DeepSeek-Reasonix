@@ -524,8 +524,11 @@ function AppInner({
   useEffect(() => {
     markPhase("first_paint");
     dumpStartupProfile();
-    // Tokenizer cold-load is ~100ms + 35MB; amortize while the user reads the banner.
-    setTimeout(warmupTokenizer, 0);
+    // Tokenizer cold-load is ~100ms + 35MB; run synchronously before
+    // first user input so the first encode() call is instant.
+    // (Moved from setTimeout(0) — the user hasn't typed yet at this point,
+    // so the 100ms sync cost is absorbed in the banner-reading idle time.)
+    warmupTokenizer();
   }, []);
 
   // Live MCP server list: initialized from the boot-time prop, then

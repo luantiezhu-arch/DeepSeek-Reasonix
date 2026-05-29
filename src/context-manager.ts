@@ -112,9 +112,20 @@ function collectPinnedSkills(head: ChatMessage[]): { names: string[]; bodies: st
 export class ContextManager {
   constructor(private deps: ContextManagerDeps) {}
 
-  /** Real-time token count of the current log — used by Desktop to refresh the
-   *  context meter after /compact when no API usage event is available. */
+  private _logTokenCache: number | null = null;
+  private _logTokenVersion = -1;
+
+  /** Call after any write to the log so the next getLogTokens() recomputes. */
+  onLogMutated(): void {
+    this._logTokenCache = null;
+  }
+
+  /** Real-time token count of the current log — results cached between mutations. */
   getLogTokens(): number {
+    const currentVersion = this.deps.log.version;
+    if (this._logTokenCache !== null && this._logTokenVersion === currentVersion) {
+      return this._logTokenCache;
+    }
     const entries = this.deps.log.toFullHistory();
     let total = 0;
     for (const e of entries) {
@@ -124,6 +135,8 @@ export class ContextManager {
         total += countTokensBounded(JSON.stringify(e.tool_calls));
       }
     }
+    this._logTokenCache = total;
+    this._logTokenVersion = currentVersion;
     return total;
   }
 

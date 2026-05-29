@@ -136,19 +136,10 @@ function replaceLoneSurrogates(value: string): string {
   return out + value.slice(last);
 }
 
-function sanitizeJsonTransportValue(value: unknown): unknown {
-  if (typeof value === "string") return replaceLoneSurrogates(value);
-  if (value === null || typeof value !== "object") return value;
-  if (Array.isArray(value)) return value.map((item) => sanitizeJsonTransportValue(item));
-  const out: Record<string, unknown> = {};
-  for (const [key, item] of Object.entries(value)) {
-    out[key] = sanitizeJsonTransportValue(item);
-  }
-  return out;
-}
-
+/** Stringify and sanitize: replace lone surrogates in the final JSON string (O(N) on string, not O(N) on object graph). */
 function stringifyJsonTransport(value: unknown): string {
-  return JSON.stringify(sanitizeJsonTransportValue(value));
+  const raw = JSON.stringify(value);
+  return replaceLoneSurrogates(raw);
 }
 
 export class DeepSeekClient {

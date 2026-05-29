@@ -1,6 +1,20 @@
 import { promises as fs } from "node:fs";
 import * as pathMod from "node:path";
 import picomatch from "picomatch";
+import { LruCache } from "../../core/lru.js";
+
+/** Cache up to 32 compiled picomatch patterns for repeated globFiles calls. */
+const patternCache = new LruCache<string, ReturnType<typeof picomatch>>(32);
+
+function cachedPicomatch(pattern: string): ReturnType<typeof picomatch> {
+  const key = `${pattern}|d|n`;
+  let cached = patternCache.get(key);
+  if (!cached) {
+    cached = picomatch(pattern, { dot: true, nocase: true });
+    patternCache.set(key, cached);
+  }
+  return cached;
+}
 
 export interface GlobContext {
   rootDir: string;
@@ -28,7 +42,7 @@ export async function globFiles(
   const includeDeps = args.include_deps === true;
   const sortBy = args.sort_by ?? "mtime";
   const limit = Math.max(1, Math.min(1000, Math.floor(args.limit ?? 200)));
-  const isMatch = picomatch(args.pattern, { dot: true, nocase: true });
+  const isMatch = cachedPicomatch(args.pattern);
 
   const hits: { rel: string; mtimeMs: number }[] = [];
 

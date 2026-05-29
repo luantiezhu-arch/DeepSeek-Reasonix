@@ -39,8 +39,13 @@ export class ImmutablePrefix {
     return [{ role: "system", content: this.system }, ...this.fewShots.map((m) => ({ ...m }))];
   }
 
+  private _toolsCache: ToolSpec[] | null = null;
+
   tools(): ToolSpec[] {
-    return this._toolSpecs.map((t) => structuredClone(t) as ToolSpec);
+    if (!this._toolsCache) {
+      this._toolsCache = this._toolSpecs.map((t) => structuredClone(t) as ToolSpec);
+    }
+    return this._toolsCache;
   }
 
   addTool(spec: ToolSpec): boolean {
@@ -49,6 +54,7 @@ export class ImmutablePrefix {
     if (this._toolSpecs.some((t) => t.function?.name === name)) return false;
     this._toolSpecs.push(spec);
     this._fingerprintCache = null;
+    this._toolsCache = null; // invalidate
     return true;
   }
 
@@ -58,6 +64,7 @@ export class ImmutablePrefix {
     if (idx < 0) return false;
     this._toolSpecs.splice(idx, 1);
     this._fingerprintCache = null;
+    this._toolsCache = null; // invalidate
     return true;
   }
 
@@ -97,6 +104,8 @@ export class AppendOnlyLog {
   private _sessionPath: string | null;
   // Tracks total across window + disk so callers see the correct length.
   private _totalLength: number;
+  /** Monotonic version counter — bumped on every append/initWindow so caches can detect staleness. */
+  version = 0;
 
   constructor(opts?: { windowSize?: number; sessionPath?: string }) {
     this._windowSize = opts?.windowSize ?? DEFAULT_WINDOW;
@@ -111,6 +120,7 @@ export class AppendOnlyLog {
         ? messages.slice(messages.length - this._windowSize)
         : [...messages];
     this._totalLength = messages.length;
+    this.version++;
   }
 
   append(message: ChatMessage): void {
@@ -119,6 +129,7 @@ export class AppendOnlyLog {
     }
     this._entries.push(message);
     this._totalLength++;
+    this.version++;
     if (this._entries.length > this._windowSize) {
       this._entries.shift();
     }

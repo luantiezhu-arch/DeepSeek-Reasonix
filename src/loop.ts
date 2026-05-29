@@ -320,6 +320,7 @@ export class CacheFirstLoop {
   appendAndPersist(message: ChatMessage): void {
     const retained = shrinkMessageForRetention(message);
     this.log.append(retained);
+    this.context.onLogMutated();
     if (this.sessionName) {
       try {
         appendSessionMessage(this.sessionName, retained);

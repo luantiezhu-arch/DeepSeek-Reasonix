@@ -125,13 +125,13 @@ export function registerShellTools(registry: ToolRegistry, opts: ShellToolsOptio
 
       // Sandbox mode: run with temp dir + env sanitization + security checks
       if (args.sandbox) {
-        const { Sandbox } = await import("../core/sandbox/sandbox.js");
-        const sbox = new Sandbox({
-          isolate: true,
-          sanitizeEnv: true,
-          timeoutMs: effectiveTimeout * 1000,
-          maxOutputBytes: maxOutputChars,
-        });
+        const { Sandbox, sandboxOptionsFromLevel } = await import("../core/sandbox/sandbox.js");
+        const sbox = new Sandbox(
+          sandboxOptionsFromLevel("strict", {
+            timeoutMs: effectiveTimeout * 1000,
+            maxOutputBytes: maxOutputChars,
+          }),
+        );
         // Pre-flight security check (throws on dangerous patterns)
         sbox.preflight(cmd);
         const cwd = sbox.getCwd(rootDir);

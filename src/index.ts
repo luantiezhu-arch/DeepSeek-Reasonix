@@ -94,7 +94,8 @@ export {
   registerPlanTool,
 } from "./tools/plan.js";
 export type { PlanStep, PlanStepRisk, PlanToolOptions, StepCompletion } from "./tools/plan.js";
-export { Sandbox } from "./core/sandbox/sandbox.js";
+export { Sandbox, sandboxOptionsFromLevel } from "./core/sandbox/sandbox.js";
+export type { SandboxLevel, SandboxOptions } from "./core/sandbox/sandbox.js";
 export { checkCommandSafety } from "./core/sandbox/security.js";
 export { globalPermissions } from "./core/sandbox/permissions.js";
 export type { PermissionRule, PermissionResult } from "./core/sandbox/permissions.js";

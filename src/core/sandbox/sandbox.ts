@@ -23,6 +23,32 @@ import { join } from "node:path";
 import { type PermissionAction, type PermissionResult, globalPermissions } from "./permissions.js";
 import { checkCommandSafety } from "./security.js";
 
+/** Sandbox protection level. Low-to-high: off → light → strict. */
+export type SandboxLevel = "off" | "light" | "strict";
+
+/** Build SandboxOptions from a named level, merged with any per-field overrides. */
+export function sandboxOptionsFromLevel(
+  level: SandboxLevel,
+  overrides?: SandboxOptions,
+): SandboxOptions {
+  const base: SandboxOptions = {};
+  switch (level) {
+    case "off":
+      break;
+    case "light":
+      base.sanitizeEnv = true;
+      base.timeoutMs = 30_000;
+      break;
+    case "strict":
+      base.isolate = true;
+      base.sanitizeEnv = true;
+      base.timeoutMs = 15_000;
+      base.permissionMode = "deny";
+      break;
+  }
+  return { ...base, ...overrides };
+}
+
 export interface SandboxOptions {
   /** Create an isolated temp directory as the sandbox root. */
   isolate?: boolean;

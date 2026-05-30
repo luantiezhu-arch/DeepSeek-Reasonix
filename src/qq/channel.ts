@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { loadQQConfig } from "../config.js";
@@ -9,51 +9,9 @@ import { type C2CMessage, QQBot } from "./bot.js";
 import { formatQQAccessSummary } from "./strings.js";
 
 const QQ_LOCK_FILE = join(homedir(), ".reasonix", "qq-channel.pid");
-const QQ_DEDUP_FILE = join(homedir(), ".reasonix", "qq-dedup.json");
-const QQ_STATE_FILE = join(homedir(), ".reasonix", "qq-channel.json");
 const QQ_MAX_CHUNK_BYTES = 1500;
 const NATURAL_SPLIT_MIN_FRACTION = 0.6;
 const QQ_MARKDOWN_WRAPPER_RE = /^```(?:markdown|md)\s*\r?\n([\s\S]*?)\r?\n```$/i;
-
-interface QQDedupState {
-  ids: string[];
-  maxSize?: number;
-}
-
-interface QQChannelState {
-  runtimeBoundOpenId: string | null;
-}
-
-const DEDUP_MAX_SIZE = 500;
-
-function loadDedupState(): QQDedupState {
-  try {
-    if (!existsSync(QQ_DEDUP_FILE)) return { ids: [] };
-    const raw = JSON.parse(readFileSync(QQ_DEDUP_FILE, "utf-8")) as QQDedupState;
-    return { ids: raw.ids ?? [], maxSize: raw.maxSize ?? DEDUP_MAX_SIZE };
-  } catch {
-    return { ids: [] };
-  }
-}
-
-function saveDedupState(state: QQDedupState): void {
-  mkdirSync(dirname(QQ_DEDUP_FILE), { recursive: true });
-  writeFileSync(QQ_DEDUP_FILE, JSON.stringify({ ids: state.ids }), "utf-8");
-}
-
-function loadChannelState(): QQChannelState {
-  try {
-    if (!existsSync(QQ_STATE_FILE)) return { runtimeBoundOpenId: null };
-    return JSON.parse(readFileSync(QQ_STATE_FILE, "utf-8")) as QQChannelState;
-  } catch {
-    return { runtimeBoundOpenId: null };
-  }
-}
-
-function saveChannelState(state: QQChannelState): void {
-  mkdirSync(dirname(QQ_STATE_FILE), { recursive: true });
-  writeFileSync(QQ_STATE_FILE, JSON.stringify(state), "utf-8");
-}
 
 function fitUtf8Slice(text: string, maxBytes: number): string {
   let end = 0;
@@ -120,28 +78,18 @@ export class QQChannel {
     private callbacks: {
       onSubmitMessage: (text: string) => void;
       onError?: (msg: string) => void;
+      onInfo?: (msg: string) => void;
     },
-  ) {
-    // Restore persistent dedup state so restarts don't re-process old messages
-    const dedup = loadDedupState();
-    for (const id of dedup.ids) {
-      this.processedMsgIds.add(id);
-      this.processedMsgIdQueue.push(id);
-    }
-    const state = loadChannelState();
-    this.runtimeBoundOpenId = state.runtimeBoundOpenId;
-  }
+  ) {}
 
   private rememberMessage(id: string): boolean {
     if (this.processedMsgIds.has(id)) return false;
     this.processedMsgIds.add(id);
     this.processedMsgIdQueue.push(id);
-    while (this.processedMsgIdQueue.length > DEDUP_MAX_SIZE) {
+    if (this.processedMsgIdQueue.length > 200) {
       const oldest = this.processedMsgIdQueue.shift();
       if (oldest) this.processedMsgIds.delete(oldest);
     }
-    // Persist so restarts won't re-process these messages
-    saveDedupState({ ids: [...this.processedMsgIds] });
     return true;
   }
 
@@ -213,8 +161,7 @@ export class QQChannel {
     }
     if (verdict.bindRuntime) {
       this.runtimeBoundOpenId = openid;
-      saveChannelState({ runtimeBoundOpenId: openid });
-      this.callbacks.onError?.(
+      this.callbacks.onInfo?.(
         t("handlers.qq.runtimeBound", {
           openid: redactQQOpenId(openid),
         }),
@@ -340,11 +287,6 @@ export class QQChannel {
   }
 
   async stop(): Promise<void> {
-    // Persist final state before shutdown
-    if (this.processedMsgIds.size > 0) {
-      saveDedupState({ ids: [...this.processedMsgIds] });
-    }
-    saveChannelState({ runtimeBoundOpenId: this.runtimeBoundOpenId });
     await this.bot?.stop();
     this.releaseLock();
   }

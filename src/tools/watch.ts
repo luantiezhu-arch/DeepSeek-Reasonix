@@ -28,7 +28,7 @@ function rejectSystemPaths(p: string): void {
   ];
   for (const d of dangerous) {
     if (normalized.startsWith(`${d}/`) || normalized === d) {
-      throw new Error(`[watch] 不支持的监控目标: ${pathResolve(p, "..")} (系统关键路径)`);
+      throw new Error(`[watch] 不支持的监控目标: ${pathResolve(p)} (系统关键路径)`);
     }
   }
 }

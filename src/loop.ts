@@ -65,8 +65,10 @@ import {
 import { type CacheDiagnostics, SessionStats, type TurnStats } from "./telemetry/stats.js";
 import { countTokensBounded } from "./tokenizer.js";
 import { ToolRegistry } from "./tools.js";
+import { resetImageState } from "./tools/image.js";
 import { ReadTracker } from "./tools/read-tracker.js";
 import { resetScheduleState } from "./tools/schedule.js";
+import { resetSendMessageNotify } from "./tools/send-message.js";
 import type { ChatMessage, ToolCall, ToolSpec } from "./types.js";
 
 export const MID_TURN_STEER_WRAPPER =
@@ -392,6 +394,8 @@ export class CacheFirstLoop {
     this.scratch.reset();
     this._inflight.clear();
     resetScheduleState();
+    resetImageState();
+    resetSendMessageNotify();
     this.stats.reset();
     this._turn = 0;
     this._budgetWarned = false;

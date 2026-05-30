@@ -6,6 +6,11 @@ import type { ToolRegistry } from "../tools.js";
 let _notifyHook: ((message: string, level: string) => void) | null = null;
 
 /** Wire an external notification channel (e.g. QQ sendResponse) to send_message. */
+/** Clear notification hook on /new — prevents stale QQ references. */
+export function resetSendMessageNotify(): void {
+  _notifyHook = null;
+}
+
 export function setSendMessageNotify(
   hook: ((message: string, level: string) => void) | null,
 ): void {

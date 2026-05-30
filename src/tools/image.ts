@@ -28,6 +28,11 @@ function mimeType(path: string): string {
   return MIME_MAP[ext] ?? "image/png";
 }
 
+/** Clear last image path on /new — prevents cross-session path leak. */
+export function resetImageState(): void {
+  _lastImagePath = "";
+}
+
 function loadVisionConfig(): { url: string; key: string } {
   const envUrl = process.env.VISION_PROXY_URL;
   const envKey = process.env.VISION_PROXY_KEY || getVisionKey();

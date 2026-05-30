@@ -1,7 +1,4 @@
-/**
- * Permission rule system for the Reasonix sandbox.
- * Adapted from Claude Code's permission model — rules are evaluated before spawn.
- */
+/** Permission rule system — rules are evaluated before spawn. */
 
 export type PermissionAction = "allow" | "deny" | "ask";
 

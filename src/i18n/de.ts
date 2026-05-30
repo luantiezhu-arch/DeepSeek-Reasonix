@@ -770,6 +770,8 @@ export const de: TranslationSchema = {
         '▸ neues Gespräch — {count} Nachricht(en) aus dem Kontext entfernt. Vorheriges Transkript als "{archived}" archiviert (sichtbar unter Sitzungen).',
       newInfoSystemReloaded:
         " · REASONIX.md / Projekt-Memory neu geladen (nächster Turn zahlt einen Cache-Fehler)",
+      newRecoveryHint:
+        "\n  Tipp: Mit /sessions können Sie zu einem früheren Gespräch zurückkehren.",
       helpTitle: "Befehle:",
       helpShellTitle: "Shell-Kürzel:",
       helpShell: "  !<befehl>                 <befehl> im Sandbox-Root ausführen; Ausgabe kommt",
@@ -1080,6 +1082,8 @@ export const de: TranslationSchema = {
       contextInfo:
         "Kontext: ~{total} von {max} ({pct}%) · System {sys} · Tools {tools} · Log {log}",
       compactStarting: "▸ falte ältere Turns in eine Zusammenfassung...",
+      compactStartingApiCall:
+        "▸ falte ältere Turns in eine Zusammenfassung (verbraucht einen API-Aufruf)...",
       compactNoop:
         "▸ nichts zu falten — Log bereits klein oder aktuelle Turns allein überschreiten das Budget.",
       compactDone:

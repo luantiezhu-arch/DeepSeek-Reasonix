@@ -152,7 +152,7 @@ const compact: SlashHandler = (_args, loop, ctx) => {
     .catch((err: Error) => {
       ctx.postInfo?.(t("handlers.observability.compactFailed", { reason: err.message }));
     });
-  return { info: t("handlers.observability.compactStarting") };
+  return { info: t("handlers.observability.compactStartingApiCall") };
 };
 
 const cost: SlashHandler = (args, loop, ctx) => {

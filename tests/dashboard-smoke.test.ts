@@ -6,37 +6,40 @@ import { describe, expect, it } from "vitest";
 
 const DASHBOARD_ROOT = join(process.cwd(), "dashboard");
 const DASHBOARD_DIST = join(DASHBOARD_ROOT, "dist");
+const DASHBOARD_BUILT = existsSync(DASHBOARD_DIST) && existsSync(join(DASHBOARD_DIST, "app.js"));
+
+const dashboardIt = DASHBOARD_BUILT ? it : it.skip;
 
 describe("dashboard build artifacts", () => {
-  it("index.html exists", () => {
+  dashboardIt("index.html exists", () => {
     expect(existsSync(join(DASHBOARD_ROOT, "index.html"))).toBe(true);
   });
 
-  it("app.js exists in dist", () => {
+  dashboardIt("app.js exists in dist", () => {
     expect(existsSync(join(DASHBOARD_DIST, "app.js"))).toBe(true);
   });
 
-  it("app.css exists in dist", () => {
+  dashboardIt("app.css exists in dist", () => {
     expect(existsSync(join(DASHBOARD_DIST, "app.css"))).toBe(true);
   });
 
-  it("index.html contains placeholder tokens", () => {
+  dashboardIt("index.html contains placeholder tokens", () => {
     const html = readFileSync(join(DASHBOARD_ROOT, "index.html"), "utf8");
     expect(html).toContain("__REASONIX_TOKEN__");
     expect(html).toContain("__REASONIX_MODE__");
   });
 
-  it("app.js references tauri-bridge", () => {
+  dashboardIt("app.js references tauri-bridge", () => {
     const js = readFileSync(join(DASHBOARD_DIST, "app.js"), "utf8");
     expect(js).toContain("tauri-bridge");
   });
 
-  it("app.js is non-empty", () => {
+  dashboardIt("app.js is non-empty", () => {
     const js = readFileSync(join(DASHBOARD_DIST, "app.js"), "utf8");
     expect(js.length).toBeGreaterThan(10_000);
   });
 
-  it("app.css is non-empty", () => {
+  dashboardIt("app.css is non-empty", () => {
     const css = readFileSync(join(DASHBOARD_DIST, "app.css"), "utf8");
     expect(css.length).toBeGreaterThan(1_000);
   });

@@ -721,6 +721,7 @@ export const zhCN: TranslationSchema = {
       newInfoArchived:
         "▸ 新对话 — 已从上下文中丢弃 {count} 条消息。原对话已归档为「{archived}」，可在 Sessions 面板查看。",
       newInfoSystemReloaded: " · REASONIX.md / 项目记忆已重新加载（下一轮一次性 cache miss）",
+      newRecoveryHint: "\n  提示：用 /sessions 可以切换回之前的对话。",
       helpTitle: "命令：",
       helpShellTitle: "Shell 快捷方式：",
       helpShell: "  !<cmd>                   在沙箱根目录运行 <cmd>；输出进入对话",
@@ -976,6 +977,7 @@ export const zhCN: TranslationSchema = {
     observability: {
       contextInfo: "上下文：~{total} / {max}（{pct}%）· 系统 {sys} · 工具 {tools} · 日志 {log}",
       compactStarting: "▸ 正在折叠旧轮次为摘要…",
+      compactStartingApiCall: "▸ 正在折叠旧轮次为摘要（消耗一次 API 调用）…",
       compactNoop: "▸ 无需折叠 — 日志已足够小，或最近轮次本身已超过预算。",
       compactDone: "▸ 已折叠 {before} 条消息 → {after}（摘要 {chars} 字符）。继续。",
       compactFailed: "▸ 折叠失败：{reason}",

@@ -17,7 +17,8 @@ const resetLog: SlashHandler = (_args, loop) => {
   const head = archived
     ? t("handlers.basic.newInfoArchived", { count: dropped, archived })
     : t("handlers.basic.newInfo", { count: dropped });
-  const info = systemRebuilt ? head + t("handlers.basic.newInfoSystemReloaded") : head;
+  const recovery = t("handlers.basic.newRecoveryHint");
+  const info = (systemRebuilt ? head + t("handlers.basic.newInfoSystemReloaded") : head) + recovery;
   return { clear: true, info };
 };
 

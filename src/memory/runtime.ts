@@ -143,6 +143,7 @@ export class AppendOnlyLog {
   compactInPlace(replacement: ChatMessage[]): void {
     this._entries = [...replacement];
     this._totalLength = replacement.length;
+    this.version++;
   }
 
   // Checks memory window first; falls back to disk for older messages.

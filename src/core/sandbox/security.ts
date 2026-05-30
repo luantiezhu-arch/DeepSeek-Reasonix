@@ -1,7 +1,4 @@
-/**
- * Pre-spawn security checks adapted from Claude Code's bashSecurity + bashPermissions.
- * Run BEFORE spawning any subprocess to reject dangerous patterns.
- */
+/** Pre-spawn security checks — reject dangerous patterns before spawning. */
 
 /* ------------------------------------------------------------------ */
 /*  Command substitution & injection detection                        */

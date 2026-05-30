@@ -785,6 +785,7 @@ export const JA: TranslationSchema = {
         '▸ 新しい会話 — コンテキストから {count} 件のメッセージを削除しました。以前のトランスクリプトは "{archived}" としてアーカイブされました（Sessions で表示可能）。',
       newInfoSystemReloaded:
         " · REASONIX.md / プロジェクトメモリを再読み込みしました（次のターンでキャッシュミス1回）",
+      newRecoveryHint: "\n  ヒント: /sessions で以前の会話に切り替えられます。",
       helpTitle: "コマンド:",
       helpShellTitle: "シェルショートカット:",
       helpShell: "  !<cmd>                   サンドボックスルートで <cmd> を実行; 出力は",
@@ -1076,6 +1077,7 @@ export const JA: TranslationSchema = {
     observability: {
       contextInfo: "context: ~{total} / {max} ({pct}%) · system {sys} · tools {tools} · log {log}",
       compactStarting: "▸ 古いターンをサマリーに折りたたみ中…",
+      compactStartingApiCall: "▸ 古いターンをサマリーに折りたたみ中（API呼び出し1回消費）…",
       compactNoop:
         "▸ 折りたたむものがありません — ログが既に小さいか、最近のターンのみで予算を超えています。",
       compactDone:

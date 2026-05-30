@@ -1,4 +1,4 @@
-import { render } from "ink";
+﻿import { render } from "ink";
 import React, { useMemo, useState } from "react";
 import {
   type ReasoningEffort,
@@ -386,7 +386,7 @@ export async function chatCommand(opts: ChatOptions): Promise<void> {
       qqChannel = channel;
       // Wire send_message → QQ push
       setSendMessageNotify((_msg, _level) => {
-        qqChannel.sendResponse(`${_msg}`).catch(() => {});
+        qqChannel!.sendResponse(`${_msg}`).catch(() => {});
       });
       process.stderr.write("QQ bot connected\n");
     } catch (err) {

@@ -1,20 +1,4 @@
-/**
- * Sandbox — native execution isolation for Reasonix.
- *
- * Provides a reusable Sandbox class that wraps subprocess spawn with:
- * - Pre-spawn security checks (command substitution, env hijack, dangerous patterns)
- * - Temp directory isolation (auto-create + auto-cleanup)
- * - Environment variable sanitization
- * - Hard timeout + forced kill
- * - Process tree tracking for cleanup
- * - Integration with the permission rule system
- *
- * Usage:
- *   const box = new Sandbox({ isolate: true, sanitizeEnv: true, timeoutMs: 30000 });
- *   const { child } = box.spawn("ls", ["-la"]);
- *   await box.waitFor(child);
- *   box.cleanup(); // kills process + removes temp dir
- */
+/** Sandbox — native execution isolation with security checks, tmpdir, and cleanup. */
 
 import { type ChildProcess, type SpawnOptions, spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -157,11 +141,7 @@ export class Sandbox {
     return out;
   }
 
-  /**
-   * Pre-flight checks: security + permissions.
-   * Throws if blocked by security checks.
-   * Returns permission result if permissionMode is set.
-   */
+  /** Pre-flight security + permissions check. Throws if blocked. */
   preflight(cmd: string): {
     security: { safe: boolean; reason?: string };
     permission?: PermissionResult;
@@ -184,10 +164,7 @@ export class Sandbox {
     return { security, permission };
   }
 
-  /**
-   * Spawn a command inside the sandbox.
-   * Runs pre-flight checks, creates temp dir, sanitizes env, then spawns.
-   */
+  /** Spawn a command inside the sandbox with pre-flight checks + temp dir isolation. */
   spawn(bin: string, args: readonly string[], spawnOpts: SpawnOptions = {}): SandboxSpawnResult {
     if (this.cleaned) throw new Error("Sandbox has already been cleaned up");
 
@@ -301,10 +278,7 @@ export class Sandbox {
   }
 }
 
-/**
- * Quick one-shot: create Sandbox, exec, cleanup.
- * Returns { stdout, stderr, exitCode }.
- */
+/** Quick one-shot: Sandbox → spawn → cleanup. Returns { stdout, stderr, exitCode }. */
 export async function sandboxExec(
   bin: string,
   args: readonly string[],

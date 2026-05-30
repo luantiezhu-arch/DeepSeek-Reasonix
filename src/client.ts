@@ -110,30 +110,46 @@ export interface DeepSeekClientOptions {
 
 // DeepSeek's strict JSON parser rejects lone UTF-16 surrogate escapes
 // (`\ud800`, `\udc00`) even though JavaScript can carry them in strings.
+// After JSON.stringify, surrogates appear as \ud800 escapes — match those too.
 function replaceLoneSurrogates(value: string): string {
-  let out = "";
-  let last = 0;
-  for (let i = 0; i < value.length; i++) {
-    const code = value.charCodeAt(i);
-    if (code >= 0xd800 && code <= 0xdbff) {
-      const next = value.charCodeAt(i + 1);
-      if (next >= 0xdc00 && next <= 0xdfff) {
-        i++;
-      } else {
+  // Pass 1: handle JSON-escaped surrogates from JSON.stringify (\ud800 etc.)
+  // Replace lone high surrogates (d800-dbff) NOT followed by low surrogate (dc00-dfff)
+  let result = value.replace(
+    /\\u[dD][89aAbB][0-9a-fA-F]{2}(?!\\u[dD][cCdDeEfF][0-9a-fA-F]{2})/g,
+    "\\uFFFD",
+  );
+  // Replace lone low surrogates (dc00-dfff) NOT preceded by high surrogate (d800-dbff)
+  result = result.replace(
+    /(?<!\\u[dD][89aAbB][0-9a-fA-F]{2})\\u[dD][cCdDeEfF][0-9a-fA-F]{2}/g,
+    "\\uFFFD",
+  );
+  // Pass 2: also handle raw surrogate code points (fallback for callers that don't use JSON.stringify)
+  if (result === value) {
+    let out = "";
+    let last = 0;
+    for (let i = 0; i < value.length; i++) {
+      const code = value.charCodeAt(i);
+      if (code >= 0xd800 && code <= 0xdbff) {
+        const next = value.charCodeAt(i + 1);
+        if (next >= 0xdc00 && next <= 0xdfff) {
+          i++;
+        } else {
+          out += value.slice(last, i);
+          out += "\uFFFD";
+          last = i + 1;
+        }
+        continue;
+      }
+      if (code >= 0xdc00 && code <= 0xdfff) {
         out += value.slice(last, i);
         out += "\uFFFD";
         last = i + 1;
       }
-      continue;
     }
-    if (code >= 0xdc00 && code <= 0xdfff) {
-      out += value.slice(last, i);
-      out += "\uFFFD";
-      last = i + 1;
-    }
+    if (last === 0) return value;
+    return out + value.slice(last);
   }
-  if (last === 0) return value;
-  return out + value.slice(last);
+  return result;
 }
 
 /** Stringify and sanitize: replace lone surrogates in the final JSON string (O(N) on string, not O(N) on object graph). */

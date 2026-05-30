@@ -1,4 +1,4 @@
-import { lookup } from "node:dns/promises";
+﻿import { lookup } from "node:dns/promises";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadBaiduApiKey, loadMetasoApiKey, writeConfig } from "../src/config.js";
 import { ToolRegistry } from "../src/tools.js";
@@ -1515,11 +1515,9 @@ describe("webFetch", () => {
     }
   });
 
-  it("refuses DNS names that resolve to internal addresses (even after DoH fallback)", async () => {
+  it("refuses DNS names that resolve to internal addresses", async () => {
     mockedLookup.mockResolvedValueOnce([{ address: "10.0.0.5", family: 4 }]);
     const originalFetch = globalThis.fetch;
-    // Stub fetch so the DoH fallback also fails — correct rejection must happen
-    // without relying on a real Cloudflare round-trip.
     globalThis.fetch = vi.fn(async () => {
       throw new Error("network offline");
     }) as unknown as typeof fetch;
@@ -1527,13 +1525,35 @@ describe("webFetch", () => {
       await expect(webFetch("https://metadata.example/")).rejects.toThrow(
         /refuses internal or reserved host: metadata\.example/,
       );
-      // The DoH fallback attempted a fetch; verify it went to the right endpoint.
-      expect(globalThis.fetch).toHaveBeenCalledWith(
-        expect.stringMatching(/^https:\/\/1\.1\.1\.1\/dns-query\?name=metadata\.example&type=A$/),
-        expect.objectContaining({ headers: { Accept: "application/dns-json" } }),
-      );
+      // Without DoH configured, the SSRF check fires before any fetch.
+      expect(globalThis.fetch).not.toHaveBeenCalled();
     } finally {
       globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("refuses DNS names that resolve to internal addresses even after DoH fallback", async () => {
+    process.env.REASONIX_DOH_URL = "https://1.1.1.1/dns-query";
+    try {
+      mockedLookup.mockResolvedValueOnce([{ address: "10.0.0.5", family: 4 }]);
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = vi.fn(async () => {
+        throw new Error("network offline");
+      }) as unknown as typeof fetch;
+      try {
+        await expect(webFetch("https://metadata.example/")).rejects.toThrow(
+          /refuses internal or reserved host: metadata\.example/,
+        );
+        // The DoH fallback attempted a fetch; verify it went to the right endpoint.
+        expect(globalThis.fetch).toHaveBeenCalledWith(
+          expect.stringMatching(/^https:\/\/1\.1\.1\.1\/dns-query\?name=metadata\.example&type=A$/),
+          expect.objectContaining({ headers: { Accept: "application/dns-json" } }),
+        );
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    } finally {
+      process.env.REASONIX_DOH_URL = undefined;
     }
   });
 

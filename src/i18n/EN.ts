@@ -752,6 +752,7 @@ export const EN: TranslationSchema = {
         '▸ new conversation — dropped {count} message(s) from context. Prior transcript archived as "{archived}" (visible under Sessions).',
       newInfoSystemReloaded:
         " · REASONIX.md / project memory reloaded (next turn pays one cache miss)",
+      newRecoveryHint: "\n  Tip: use /sessions to switch back to a previous conversation.",
       helpTitle: "Commands:",
       helpShellTitle: "Shell shortcut:",
       helpShell: "  !<cmd>                   run <cmd> in the sandbox root; output goes into",
@@ -1035,6 +1036,7 @@ export const EN: TranslationSchema = {
     observability: {
       contextInfo: "context: ~{total} of {max} ({pct}%) · system {sys} · tools {tools} · log {log}",
       compactStarting: "▸ folding older turns into a summary…",
+      compactStartingApiCall: "▸ folding older turns into a summary (consumes one API call)…",
       compactNoop: "▸ nothing to fold — log already small or recent turns alone exceed the budget.",
       compactDone: "▸ folded {before} messages → {after} (summary {chars} chars). Continuing.",
       compactFailed: "▸ fold failed: {reason}",

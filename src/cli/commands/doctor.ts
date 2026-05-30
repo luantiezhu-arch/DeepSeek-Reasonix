@@ -51,8 +51,10 @@ export async function runDoctorChecks(projectRoot: string): Promise<DoctorCheck[
     checkHooks(projectRoot),
     checkOllama(projectRoot),
     checkProject(projectRoot),
+    checkDashboard(),
+    checkWindowsCodepage(),
   ]);
-  return [r[0], r[1], ...checkProxy(), r[2], r[3], r[4], r[5], r[6], r[7]];
+  return [r[0], r[1], ...checkProxy(), r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9]];
 }
 
 /** Probe hosts used to show users what's going through the proxy vs. direct. Cheap (no I/O), purely a routing simulation against the same NO_PROXY patterns the dispatcher uses. */
@@ -491,6 +493,56 @@ async function checkProject(projectRoot: string): Promise<Check> {
     label: "project      ",
     level: "ok",
     detail: `${projectRoot} (${found.join(", ")})`,
+  };
+}
+
+function checkDashboard(): Check {
+  const dist = join(process.cwd(), "dashboard", "dist");
+  const appJs = join(dist, "app.js");
+  if (existsSync(appJs)) {
+    return {
+      id: "dashboard",
+      label: "dashboard    ",
+      level: "ok",
+      detail: `built (${Math.round(statSync(appJs).size / 1024)} KB app.js) — run \`reasonix serve\` to start`,
+    };
+  }
+  return {
+    id: "dashboard",
+    label: "dashboard    ",
+    level: "warn",
+    detail: "not built — run `npm run build:dashboard` to enable the web dashboard",
+  };
+}
+
+function checkWindowsCodepage(): Check {
+  if (process.platform !== "win32") {
+    return {
+      id: "codepage",
+      label: "codepage     ",
+      level: "ok",
+      detail: "n/a (not Windows)",
+    };
+  }
+  try {
+    const cp = process.env.LC_ALL ?? process.env.LANG ?? "";
+    if (cp.toLowerCase().includes("utf-8") || cp.toLowerCase().includes("utf8")) {
+      return {
+        id: "codepage",
+        label: "codepage     ",
+        level: "ok",
+        detail: `UTF-8 (${cp})`,
+      };
+    }
+  } catch {
+    /* env read may fail */
+  }
+  return {
+    id: "codepage",
+    label: "codepage     ",
+    level: "warn",
+    detail:
+      "not UTF-8 — CJK output may be garbled. In PowerShell, run: `[Console]::OutputEncoding=[Text.Encoding]::UTF8`",
   };
 }
 

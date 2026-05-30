@@ -3,11 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-/**
- * schedule.ts unit tests — cron matching + CRUD persistence.
- * The registerScheduleTool stores tasks in ~/.reasonix/scheduled_tasks.json
- * but we test the underlying logic directly via a minimal integration harness.
- */
+/** schedule.ts unit tests — cron matching + CRUD persistence. */
 
 // We need to test matchCron and matchField — import directly
 // (they are not exported, so we reconstruct them inline for thoroughness)

@@ -1,7 +1,4 @@
-/** schedule — persistent scheduled tasks (cron-style) with optional background scheduler.
- *  Tasks are stored in ~/.reasonix/scheduled_tasks.json. Start the background loop via
- *  `schedule start` — it polls every 15s and fires due tasks via send_message.
- */
+/** schedule — persistent cron tasks, stored in ~/.reasonix/scheduled_tasks.json. */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";

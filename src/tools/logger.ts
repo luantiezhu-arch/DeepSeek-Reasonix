@@ -23,10 +23,7 @@ function summarizeArgs(args: Record<string, unknown>): string {
   }
 }
 
-/**
- * Log a tool call to a date-rotated file.
- * Each line is JSON: { ts, name, args, ok, durationMs }
- */
+/** Log a tool call to a date-rotated JSONL file. */
 export function logToolCall(
   name: string,
   args: Record<string, unknown>,

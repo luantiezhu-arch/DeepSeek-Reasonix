@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+﻿import { createHash } from "node:crypto";
 import {
   type PrefixDiagnosticHashes,
   prefixDiagnosticHashes,
@@ -19,19 +19,43 @@ export interface PrefixComponentHashes {
   full: string;
 }
 
+/** Deep-sort all object keys for canonical JSON — prevents cache churn from unstable key ordering.
+ *  Arrays are left in their existing order (tools already sorted by name in sortToolSpecs). */
+function sortedJSON(value: unknown): string {
+  function sortKeys(obj: unknown): unknown {
+    if (obj === null || obj === undefined) return obj;
+    if (Array.isArray(obj)) return obj.map(sortKeys);
+    if (typeof obj === "object" && !(obj instanceof Date) && !(obj instanceof RegExp)) {
+      return Object.fromEntries(
+        Object.entries(obj)
+          .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+          .map(([k, v]) => [k, sortKeys(v)]),
+      );
+    }
+    return obj;
+  }
+  return JSON.stringify(sortKeys(value));
+}
+
 function shortHash(value: unknown): string {
-  return createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 16);
+  return createHash("sha256").update(sortedJSON(value)).digest("hex").slice(0, 16);
 }
 
 function toolName(spec: ToolSpec): string {
   return spec.function?.name ?? "";
 }
 
+/** Deep-sort tool spec keys for canonical JSON. The name sort is locale-independent (no localeCompare!) because
+ *  the host locale would reshuffle the serialized tool prefix and reintroduce cache churn. */
 export function sortToolSpecs(specs: readonly ToolSpec[]): ToolSpec[] {
-  // Locale-independent codepoint compare — localeCompare would let the host
-  // locale reshuffle the serialized tool prefix and reintroduce cache churn.
   return [...specs]
-    .map((spec) => structuredClone(spec) as ToolSpec)
+    .map((spec) => {
+      const cloned = structuredClone(spec) as ToolSpec;
+      if (cloned.function?.parameters) {
+        cloned.function.parameters = JSON.parse(sortedJSON(cloned.function.parameters));
+      }
+      return cloned;
+    })
     .sort((a, b) => {
       const an = toolName(a);
       const bn = toolName(b);

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * PlanPanel — unified right-side panel for all plan-related interaction.
  *
  * Replaces the previous modal-overlay pattern (PlanConfirm / PlanRefineInput /
@@ -16,8 +16,8 @@
  */
 
 import { Box, type Color, Text } from "ink";
-import type React from "react";
-import { useMemo, useState } from "react";
+// biome-ignore lint/style/useImportType: React is used as a value for JSX
+import React, { useMemo, useState } from "react";
 import { t } from "../../i18n/index.js";
 import type { PlanStep, StepCompletion } from "../../tools/plan.js";
 import type { CheckpointChoice } from "./PlanCheckpointConfirm.js";

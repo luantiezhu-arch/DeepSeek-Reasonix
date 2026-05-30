@@ -31,9 +31,7 @@ export function registerPowerShellTool(registry: ToolRegistry): ToolRegistry {
       }
 
       const timeoutMs = Math.min(120_000, Math.max(5_000, (args.timeout ?? 30) * 1000));
-      const ps = process.env.PROCESSOR_ARCHITECTURE?.toLowerCase().includes("arm")
-        ? "pwsh.exe"
-        : "powershell.exe";
+      const ps = "powershell.exe";
 
       return new Promise<string>((resolve, reject) => {
         const child = spawn(

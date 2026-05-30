@@ -6,7 +6,11 @@ import type { ToolRegistry } from "../tools.js";
 
 /** Reject obvious system paths that shouldn't be watched. */
 function rejectSystemPaths(p: string): void {
-  const normalized = p.toLowerCase().replace(/\\/g, "/");
+  // Normalize: lowercase, forward slashes, strip Windows drive letter
+  const normalized = p
+    .toLowerCase()
+    .replace(/\\/g, "/")
+    .replace(/^[a-z]:\/?/, "");
   const dangerous = [
     "/etc",
     "/bin",
@@ -19,6 +23,8 @@ function rejectSystemPaths(p: string): void {
     "/windows",
     "/windows/system32",
     "/system volume information",
+    "/program files",
+    "/program files (x86)",
   ];
   for (const d of dangerous) {
     if (normalized.startsWith(`${d}/`) || normalized === d) {

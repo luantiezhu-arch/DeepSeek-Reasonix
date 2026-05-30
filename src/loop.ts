@@ -1,4 +1,4 @@
-import { type DeepSeekClient, Usage } from "./client.js";
+﻿import { type DeepSeekClient, Usage } from "./client.js";
 import type { ReasoningEffort } from "./config.js";
 import type { PauseGate } from "./core/pause-gate.js";
 import { pauseGate as defaultPauseGate } from "./core/pause-gate.js";
@@ -66,6 +66,7 @@ import { type CacheDiagnostics, SessionStats, type TurnStats } from "./telemetry
 import { countTokensBounded } from "./tokenizer.js";
 import { ToolRegistry } from "./tools.js";
 import { ReadTracker } from "./tools/read-tracker.js";
+import { resetScheduleState } from "./tools/schedule.js";
 import type { ChatMessage, ToolCall, ToolSpec } from "./types.js";
 
 export const MID_TURN_STEER_WRAPPER =
@@ -390,6 +391,7 @@ export class CacheFirstLoop {
     }
     this.scratch.reset();
     this._inflight.clear();
+    resetScheduleState();
     this.stats.reset();
     this._turn = 0;
     this._budgetWarned = false;
@@ -424,6 +426,7 @@ export class CacheFirstLoop {
     this.log.compactInPlace([]);
     this.scratch.reset();
     this._inflight.clear();
+    resetScheduleState();
     this._lastCacheShape = null;
     this._steerQueue.length = 0;
     this._steerConsumed = false;

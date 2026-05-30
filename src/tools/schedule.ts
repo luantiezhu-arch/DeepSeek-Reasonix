@@ -1,6 +1,7 @@
-/** schedule — persistent cron tasks, stored in ~/.reasonix/scheduled_tasks.json. */
+﻿/** schedule — persistent cron tasks, stored in ~/.reasonix/scheduled_tasks.json. */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ToolCallContext, ToolRegistry } from "../tools.js";
@@ -51,19 +52,20 @@ interface TaskStore {
   nextId: number;
 }
 
-function load(): TaskStore {
+async function load(): Promise<TaskStore> {
   try {
     if (!existsSync(STORE_PATH)) return { tasks: [], nextId: 1 };
-    return JSON.parse(readFileSync(STORE_PATH, "utf-8")) as TaskStore;
+    const raw = await readFile(STORE_PATH, "utf-8");
+    return JSON.parse(raw) as TaskStore;
   } catch {
     return { tasks: [], nextId: 1 };
   }
 }
 
-function save(store: TaskStore): void {
+async function save(store: TaskStore): Promise<void> {
   const dir = join(homedir(), ".reasonix");
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  writeFileSync(STORE_PATH, JSON.stringify(store, null, 2), "utf-8");
+  if (!existsSync(dir)) await mkdir(dir, { recursive: true });
+  await writeFile(STORE_PATH, JSON.stringify(store, null, 2), "utf-8");
 }
 
 function cronToHuman(expr: string): string {
@@ -84,8 +86,8 @@ let _registry: ToolRegistry | null = null;
 
 const SCHEDULER_INTERVAL_MS = 15_000; // check every 15 seconds
 
-function schedulerTick(): void {
-  const store = load();
+async function schedulerTick(): Promise<void> {
+  const store = await load();
   if (store.tasks.length === 0) return;
   const now = new Date();
   const minuteKey =
@@ -114,11 +116,22 @@ function schedulerTick(): void {
         .catch(() => {});
     }
   }
-  if (modified) save(store);
+  if (modified) await save(store);
+}
+
+/** Clear scheduler state — call on session reset (/new) to prevent state leaks. */
+export function resetScheduleState(): void {
+  if (_schedulerTimer) {
+    clearInterval(_schedulerTimer);
+    _schedulerTimer = null;
+  }
+  _lastFiredMinute.clear();
+  _registry = null;
 }
 
 /* ------------------------------------------------------------------ */
-/*  Tool registration                                                 */
+/*  Tool registration
+ */
 /* ------------------------------------------------------------------ */
 
 export function registerScheduleTool(registry: ToolRegistry): ToolRegistry {
@@ -151,7 +164,7 @@ export function registerScheduleTool(registry: ToolRegistry): ToolRegistry {
       args: { command: string; cron?: string; prompt?: string; id?: string },
       _ctx?: ToolCallContext,
     ) => {
-      const store = load();
+      const store = await load();
 
       switch (args.command) {
         case "create": {
@@ -186,7 +199,7 @@ export function registerScheduleTool(registry: ToolRegistry): ToolRegistry {
             createdAt: now.toISOString(),
           };
           store.tasks.push(task);
-          save(store);
+          await save(store);
           return `✅ 已创建定时任务 #${task.id}\n  cron: ${args.cron} (${cronToHuman(args.cron)})\n  prompt: ${args.prompt}`;
         }
 
@@ -204,7 +217,7 @@ export function registerScheduleTool(registry: ToolRegistry): ToolRegistry {
           if (idx < 0) throw new Error(`schedule: 找不到任务 #${args.id}`);
           store.tasks.splice(idx, 1);
           _lastFiredMinute.delete(Number.parseInt(args.id!));
-          save(store);
+          await save(store);
           return `✅ 已删除任务 #${args.id}`;
         }
 

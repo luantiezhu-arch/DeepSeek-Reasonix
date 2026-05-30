@@ -94,6 +94,13 @@ export function registerImageTool(registry: ToolRegistry): ToolRegistry {
       }
       if (!imageBuffer) throw new Error(`view_image: 找不到文件 "${args.path ?? _lastImagePath}"`);
 
+      // Path traversal guard — only allow files within the workspace
+      const resolvedPath = resolve(imagePath);
+      const workspaceRoot = resolve(process.cwd());
+      if (!resolvedPath.startsWith(workspaceRoot)) {
+        throw new Error(`view_image: 不允许读取工作目录外的文件: ${resolvedPath}`);
+      }
+
       // Remember for follow-up
       _lastImagePath = imagePath;
 

@@ -1,35 +1,35 @@
-/** Task board persistence — reads/writes ~/.reasonix/tasks.json */
+/** Task board persistence — reads/writes ~/.reasonix/tasks.json (async, non-blocking). */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync } from "node:fs";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Task, TaskColumn, TaskPriority, TaskStore } from "./types.js";
 
 const STORE_PATH = join(homedir(), ".reasonix", "tasks.json");
+const STORE_DIR = join(homedir(), ".reasonix");
 
 function defaultStore(): TaskStore {
   return { tasks: [], nextId: 1 };
 }
 
-function ensureDir(): void {
-  const dir = join(homedir(), ".reasonix");
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+async function ensureDir(): Promise<void> {
+  if (!existsSync(STORE_DIR)) await mkdir(STORE_DIR, { recursive: true });
 }
 
-export function loadTasks(): TaskStore {
+export async function loadTasks(): Promise<TaskStore> {
   try {
-    if (!existsSync(STORE_PATH)) return defaultStore();
-    const raw = readFileSync(STORE_PATH, "utf-8");
+    const raw = await readFile(STORE_PATH, "utf-8");
     return JSON.parse(raw) as TaskStore;
   } catch {
     return defaultStore();
   }
 }
 
-export function saveTasks(store: TaskStore): void {
+export async function saveTasks(store: TaskStore): Promise<void> {
   try {
-    ensureDir();
-    writeFileSync(STORE_PATH, JSON.stringify(store, null, 2), "utf-8");
+    await ensureDir();
+    await writeFile(STORE_PATH, JSON.stringify(store, null, 2), "utf-8");
   } catch {
     // persistence must never crash the tool
   }
@@ -38,20 +38,20 @@ export function saveTasks(store: TaskStore): void {
 let _memoryStore: TaskStore | null = null;
 
 /** Session-scoped store (in-memory, falls back to file on load/save). */
-function store(): TaskStore {
-  if (!_memoryStore) _memoryStore = loadTasks();
+async function store(): Promise<TaskStore> {
+  if (!_memoryStore) _memoryStore = await loadTasks();
   return _memoryStore;
 }
 
-function persist(): void {
-  if (_memoryStore) saveTasks(_memoryStore);
+async function persist(): Promise<void> {
+  if (_memoryStore) await saveTasks(_memoryStore);
 }
 
-export function createTask(
+export async function createTask(
   title: string,
   opts?: { description?: string; column?: TaskColumn; priority?: TaskPriority; tags?: string[] },
-): Task {
-  const s = store();
+): Promise<Task> {
+  const s = await store();
   const now = new Date().toISOString();
   const task: Task = {
     id: String(s.nextId++),
@@ -64,25 +64,25 @@ export function createTask(
     updatedAt: now,
   };
   s.tasks.push(task);
-  persist();
+  await persist();
   return task;
 }
 
-export function moveTask(id: string, column: TaskColumn): Task | null {
-  const s = store();
+export async function moveTask(id: string, column: TaskColumn): Promise<Task | null> {
+  const s = await store();
   const task = s.tasks.find((t) => t.id === id);
   if (!task) return null;
   task.column = column;
   task.updatedAt = new Date().toISOString();
-  persist();
+  await persist();
   return task;
 }
 
-export function updateTask(
+export async function updateTask(
   id: string,
   updates: Partial<Pick<Task, "title" | "description" | "priority" | "tags">>,
-): Task | null {
-  const s = store();
+): Promise<Task | null> {
+  const s = await store();
   const task = s.tasks.find((t) => t.id === id);
   if (!task) return null;
   if (updates.title !== undefined) task.title = updates.title;
@@ -90,26 +90,26 @@ export function updateTask(
   if (updates.priority !== undefined) task.priority = updates.priority;
   if (updates.tags !== undefined) task.tags = updates.tags;
   task.updatedAt = new Date().toISOString();
-  persist();
+  await persist();
   return task;
 }
 
-export function deleteTask(id: string): boolean {
-  const s = store();
+export async function deleteTask(id: string): Promise<boolean> {
+  const s = await store();
   const idx = s.tasks.findIndex((t) => t.id === id);
   if (idx < 0) return false;
   s.tasks.splice(idx, 1);
-  persist();
+  await persist();
   return true;
 }
 
-export function listTasks(opts?: {
+export async function listTasks(opts?: {
   column?: TaskColumn;
   priority?: TaskPriority;
   tag?: string;
   search?: string;
-}): Task[] {
-  const s = store();
+}): Promise<Task[]> {
+  const s = await store();
   let results = [...s.tasks];
   if (opts?.column) results = results.filter((t) => t.column === opts.column);
   if (opts?.priority) results = results.filter((t) => t.priority === opts.priority);
@@ -120,18 +120,17 @@ export function listTasks(opts?: {
       (t) => t.title.toLowerCase().includes(q) || t.description.toLowerCase().includes(q),
     );
   }
-  // Sort: newest first
   results.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   return results;
 }
 
-export function getTask(id: string): Task | undefined {
-  return store().tasks.find((t) => t.id === id);
+export async function getTask(id: string): Promise<Task | undefined> {
+  return (await store()).tasks.find((t) => t.id === id);
 }
 
 /** Count tasks in each column — useful for summary display. */
-export function countByColumn(): Record<string, number> {
-  const s = store();
+export async function countByColumn(): Promise<Record<string, number>> {
+  const s = await store();
   const counts: Record<string, number> = {};
   for (const t of s.tasks) {
     counts[t.column] = (counts[t.column] ?? 0) + 1;
@@ -140,6 +139,6 @@ export function countByColumn(): Record<string, number> {
 }
 
 /** Sync in-memory store from disk (for cross-session consistency). */
-export function reloadTasks(): void {
-  _memoryStore = loadTasks();
+export async function reloadTasks(): Promise<void> {
+  _memoryStore = await loadTasks();
 }

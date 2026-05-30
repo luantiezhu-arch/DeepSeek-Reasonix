@@ -1,4 +1,4 @@
-import type { ToolRegistry } from "../tools.js";
+﻿import type { ToolRegistry } from "../tools.js";
 import { createTask, listTasks, moveTask } from "./task-board/store.js";
 
 export type TodoStatus = "pending" | "in_progress" | "completed";
@@ -67,13 +67,13 @@ function renderTodos(todos: TodoItem[]): string {
 }
 
 /** Sync todo items to the task board store: creates new tasks for pending items that don't already have a matching task. */
-function syncToTaskBoard(todos: TodoItem[]): void {
+async function syncToTaskBoard(todos: TodoItem[]): Promise<void> {
   // Check all columns — avoid creating duplicates when title exists in another column
-  const existing = listTasks({});
+  const existing = await listTasks({});
   const existingTitles = new Set(existing.map((t) => t.title));
   for (const item of todos) {
     if (item.status === "pending" && !existingTitles.has(item.content)) {
-      createTask(item.content, { column: "todo", tags: ["todo_write"] });
+      await createTask(item.content, { column: "todo", tags: ["todo_write"] });
     }
   }
 }

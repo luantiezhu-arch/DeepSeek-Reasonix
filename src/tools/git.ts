@@ -7,22 +7,32 @@ import type { ToolCallContext, ToolRegistry } from "../tools.js";
 
 const execFileAsync = promisify(execFile);
 
-/** Run a git command and return stdout. Supports AbortSignal via ctx. */
+/** Run a git command and return stdout. Supports AbortSignal via ctx. 15s timeout + zombie cleanup. */
 async function git(args: string[], cwd: string, signal?: AbortSignal): Promise<string> {
   const ac = new AbortController();
-  const onAbort = () => ac.abort();
+  const timeout = setTimeout(() => ac.abort("timeout"), 15_000);
+  const onAbort = () => {
+    clearTimeout(timeout);
+    ac.abort();
+  };
   signal?.addEventListener("abort", onAbort, { once: true });
 
   try {
     const { stdout } = await execFileAsync("git", args, {
       cwd,
-      timeout: 15_000,
+      timeout: 0,
       encoding: "utf-8",
       maxBuffer: 2 * 1024 * 1024,
       signal: ac.signal,
     });
     return stdout.trim();
+  } catch (err) {
+    if ((err as { code?: string }).code === "ABORT_ERR") {
+      throw new Error("git: 命令执行超时（15秒）");
+    }
+    throw err;
   } finally {
+    clearTimeout(timeout);
     signal?.removeEventListener("abort", onAbort);
   }
 }

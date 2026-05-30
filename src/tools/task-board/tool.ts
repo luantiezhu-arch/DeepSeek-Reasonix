@@ -18,7 +18,7 @@ import {
   type TaskPriority,
 } from "./types.js";
 
-function formatTasks(tasks: ReturnType<typeof listTasks>): string {
+function formatTasks(tasks: Awaited<ReturnType<typeof listTasks>>): string {
   if (tasks.length === 0) return "(没有任务)";
   return tasks
     .map((t) => {
@@ -30,12 +30,12 @@ function formatTasks(tasks: ReturnType<typeof listTasks>): string {
     .join("\n");
 }
 
-function formatKanban(): string {
-  const counts = countByColumn();
+async function formatKanban(): Promise<string> {
+  const counts = await countByColumn();
   const lines: string[] = [];
   for (const col of COLUMNS) {
     const label = COLUMN_LABELS[col];
-    const tasks = listTasks({ column: col });
+    const tasks = await listTasks({ column: col });
     const count = counts[col] ?? 0;
     lines.push(`\n【${label}】（${count}）`);
     if (count === 0) {
@@ -51,8 +51,8 @@ function formatKanban(): string {
   return lines.join("\n");
 }
 
-function formatSummary(): string {
-  const counts = countByColumn();
+async function formatSummary(): Promise<string> {
+  const counts = await countByColumn();
   const parts = COLUMNS.map((c) => `${COLUMN_LABELS[c]}: ${counts[c] ?? 0}`);
   return `任务看板总览 — ${parts.join(" · ")}`;
 }
@@ -113,7 +113,7 @@ export function registerTaskBoardTool(registry: ToolRegistry): ToolRegistry {
       switch (args.command) {
         case "create": {
           if (!args.title) throw new Error("task_board: create 需要 title 参数");
-          const task = createTask(args.title, {
+          const task = await createTask(args.title, {
             description: args.description,
             column: args.column,
             priority: args.priority,
@@ -125,14 +125,14 @@ export function registerTaskBoardTool(registry: ToolRegistry): ToolRegistry {
         }
         case "move": {
           if (!args.id || !args.column) throw new Error("task_board: move 需要 id 和 column 参数");
-          const moved = moveTask(args.id, args.column);
+          const moved = await moveTask(args.id, args.column);
           if (!moved) throw new Error(`task_board: 找不到任务 #${args.id}`);
           const col = COLUMN_LABELS[moved.column] ?? moved.column;
           return `✅ 任务 #${args.id} 已移至「${col}」`;
         }
         case "update": {
           if (!args.id) throw new Error("task_board: update 需要 id 参数");
-          const updated = updateTask(args.id, {
+          const updated = await updateTask(args.id, {
             title: args.title,
             description: args.description,
             priority: args.priority,
@@ -143,23 +143,23 @@ export function registerTaskBoardTool(registry: ToolRegistry): ToolRegistry {
         }
         case "delete": {
           if (!args.id) throw new Error("task_board: delete 需要 id 参数");
-          if (deleteTask(args.id)) return `✅ 已删除任务 #${args.id}`;
+          if (await deleteTask(args.id)) return `✅ 已删除任务 #${args.id}`;
           throw new Error(`task_board: 找不到任务 #${args.id}`);
         }
         case "list": {
-          const tasks = listTasks({
+          const tasks = await listTasks({
             column: args.filter_column,
             priority: args.filter_priority,
             search: args.search,
           });
-          return `${formatSummary()}\n${formatTasks(tasks)}`;
+          return `${await formatSummary()}\n${formatTasks(tasks)}`;
         }
         case "kanban": {
-          return formatKanban();
+          return await formatKanban();
         }
         case "show": {
           if (!args.id) throw new Error("task_board: show 需要 id 参数");
-          const task = getTask(args.id);
+          const task = await getTask(args.id);
           if (!task) throw new Error(`task_board: 找不到任务 #${args.id}`);
           const col = COLUMN_LABELS[task.column] ?? task.column;
           const pri = PRIORITY_LABELS[task.priority] ?? task.priority;
@@ -168,7 +168,7 @@ export function registerTaskBoardTool(registry: ToolRegistry): ToolRegistry {
           return `#${task.id} ${task.title}\n  列: ${col} · 优先级: ${pri}${tags}${desc}\n  创建: ${task.createdAt}`;
         }
         case "summary":
-          return formatSummary();
+          return await formatSummary();
         default:
           throw new Error(`task_board: 未知命令 "${args.command}"`);
       }

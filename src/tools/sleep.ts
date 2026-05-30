@@ -1,13 +1,11 @@
-/** sleep — wait for a specified duration without holding a shell process. */
+﻿/** sleep — wait for a specified duration without holding a shell process. */
 
 import type { ToolRegistry } from "../tools.js";
 
 export function registerSleepTool(registry: ToolRegistry): ToolRegistry {
   registry.register({
     name: "sleep",
-    description:
-      "Wait for a specified duration (in seconds). Use this when you need to wait before continuing, e.g. waiting for a service to start, a file to appear, or a download to finish. Prefer this over `run_command sleep ...` — it doesn't hold a shell process.",
-    parallelSafe: true,
+    description: "等待指定秒数。适合等待服务启动、文件出现等场景。比 run_command sleep 更轻量。",
     parameters: {
       type: "object",
       properties: {

@@ -1,4 +1,4 @@
-/** watch — watch files/directories for changes. */
+﻿/** watch — watch files/directories for changes. */
 
 import { watch } from "node:fs";
 import { resolve as pathResolve } from "node:path";
@@ -36,8 +36,7 @@ function rejectSystemPaths(p: string): void {
 export function registerWatchTool(registry: ToolRegistry): ToolRegistry {
   registry.register({
     name: "watch",
-    description:
-      "监听文件或目录的变化。当文件被修改、创建或删除时返回通知。适合监控日志文件、等待构建完成等场景。默认超时 60 秒。",
+    description: "监听文件或目录变化，返回修改/创建/删除事件。适合等待构建完成或监控日志。",
     parameters: {
       type: "object",
       properties: {

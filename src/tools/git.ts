@@ -1,4 +1,4 @@
-/** git — structured Git operations (status, diff, log, commit, branch). */
+﻿/** git — structured Git operations (status, diff, log, commit, branch). */
 
 import { execFile } from "node:child_process";
 import * as pathMod from "node:path";
@@ -31,7 +31,7 @@ export function registerGitTool(registry: ToolRegistry): ToolRegistry {
   registry.register({
     name: "git",
     description:
-      "结构化 Git 操作。支持 status（工作区状态）、diff（变更内容）、log（提交历史）、commit（提交）、branch（分支列表）。\n" +
+      "Git 操作：status/diff/log/commit/branch。" +
       '用法示例: git command:status / git command:log count:10 / git command:commit message:"fix: 修复登录bug"',
     parameters: {
       type: "object",

@@ -1,4 +1,4 @@
-/** view_image — analyze a local image via deepseek-vision proxy. Supports follow-up queries. */
+﻿/** view_image — analyze a local image via deepseek-vision proxy. Supports follow-up queries. */
 
 import { readFileSync } from "node:fs";
 import { extname, resolve } from "node:path";
@@ -49,9 +49,7 @@ function loadVisionConfig(): { url: string; key: string } {
 export function registerImageTool(registry: ToolRegistry): ToolRegistry {
   registry.register({
     name: "view_image",
-    description:
-      "Analyze a local image file and return a text description. Uses a vision AI model (Qwen3.6-Flash via deepseek-vision proxy). " +
-      "Supports follow-up queries: after analyzing an image, you can ask more questions without specifying the path again.",
+    description: "分析本地图片并返回文字描述。支持追问（自动复用上次图片路径）。",
     readOnly: true,
     parameters: {
       type: "object",

@@ -1,4 +1,4 @@
-/** tool_search — search and recommend tools by keyword. */
+﻿/** tool_search — search and recommend tools by keyword. */
 
 import type { ToolRegistry } from "../tools.js";
 

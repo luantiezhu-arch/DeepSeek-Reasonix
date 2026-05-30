@@ -1,4 +1,4 @@
-/** task_board — persistent kanban-style task management with CLI kanban view. */
+﻿/** task_board — persistent kanban-style task management with CLI kanban view. */
 
 import type { ToolCallContext, ToolRegistry } from "../../tools.js";
 import {

@@ -139,12 +139,7 @@ export function registerScheduleTool(registry: ToolRegistry): ToolRegistry {
 
   registry.register({
     name: "schedule",
-    description:
-      "定时任务管理。支持创建 cron 任务、列出任务、删除任务、检查到期任务、启动/停止后台调度器。\n" +
-      "cron 格式: 5 字段 (分 时 日 月 周)，如 '*/5 * * * *' = 每5分钟, '30 14 * * *' = 每天14:30\n" +
-      "start — 启动后台调度器（每15秒自动检查到期任务并推送通知）\n" +
-      "stop — 停止后台调度器\n" +
-      "任务持久化到 ~/.reasonix/scheduled_tasks.json，跨会话保存。后台调度器仅在当前会话运行。",
+    description: "定时任务管理。创建/删除/列出 cron 任务，启动/停止后台调度器。",
     parameters: {
       type: "object",
       properties: {

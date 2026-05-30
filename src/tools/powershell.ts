@@ -1,4 +1,4 @@
-/** powershell — execute PowerShell commands natively on Windows with proper encoding. */
+﻿/** powershell — execute PowerShell commands natively on Windows with proper encoding. */
 
 import { spawn } from "node:child_process";
 import type { ToolRegistry } from "../tools.js";

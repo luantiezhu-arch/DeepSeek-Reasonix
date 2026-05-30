@@ -1,4 +1,4 @@
-/** sysinfo — system resource monitoring (CPU, memory, disk). */
+﻿/** sysinfo — system resource monitoring (CPU, memory, disk). */
 
 import { existsSync, statSync } from "node:fs";
 import { arch, cpus, freemem, hostname, platform, release, totalmem, uptime } from "node:os";
@@ -25,8 +25,7 @@ function formatDuration(seconds: number): string {
 export function registerSysInfoTool(registry: ToolRegistry): ToolRegistry {
   registry.register({
     name: "sysinfo",
-    description:
-      "查看系统资源使用情况：CPU 核心数、内存使用、系统运行时间、主机信息。适合诊断卡顿、内存泄露等问题。",
+    description: "查看系统资源：CPU、内存、运行时间、主机信息。适合诊断卡顿和内存问题。",
     readOnly: true,
     parallelSafe: true,
     parameters: {

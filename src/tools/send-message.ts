@@ -1,4 +1,4 @@
-/** send_message — push a message to the user. Optionally wires external notification (QQ, etc). */
+﻿/** send_message — push a message to the user. Optionally wires external notification (QQ, etc). */
 
 import type { ToolRegistry } from "../tools.js";
 
@@ -15,8 +15,7 @@ export function setSendMessageNotify(
 export function registerSendMessageTool(registry: ToolRegistry): ToolRegistry {
   registry.register({
     name: "send_message",
-    description:
-      "向用户推送一条消息。适合后台任务完成通知、提醒等场景。如果绑定了 QQ，也会自动推送到 QQ。",
+    description: "向用户推送消息。支持 info/success/warning/error 级别。绑定了 QQ 时自动推送。",
     readOnly: true,
     parameters: {
       type: "object",
